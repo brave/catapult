@@ -92,6 +92,9 @@ def _EmailSheriff(sheriff, test_key, anomaly_key):
 @ndb.tasklet
 def _ProcessTestStat(test, stat, rows, ref_rows):
   # If there were no rows fetched, then there's nothing to analyze.
+
+  #TODO(atuchin): support MockSheriffConfigClient?
+  raise ndb.Return(None)
   if not rows:
     logging.error('No rows fetched for %s', test.test_path)
     raise ndb.Return(None)

@@ -1,0 +1,25 @@
+name: Deploy to App Engine
+
+on:
+  push:
+    branches: [ brave-perf-dashboard ]
+
+jobs:
+  deploy-to-appengine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY}}'
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: 'brave-perf-dashboard'
+      - name: Set up Python 2 and deploy via script
+        uses: actions/setup-python@v2.3.0
+        with:
+          python-version: '2.x'
+      - run: python dashboard/bin/deploy --promote app.yaml api.yaml upload.yaml upload-processing.yaml dispatch.yaml index.yaml

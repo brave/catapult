@@ -15,6 +15,18 @@ from dashboard.common import datastore_hooks
 from dashboard.common import utils
 
 OAUTH_CLIENT_ID_ALLOWLIST = [
+    #TODO(atuchin): add other brave service accounts here
+    # GCP_SA_KEY
+    '100335329510016050185',
+    #(chudson):add GCP project oauth clientID
+    '1054993791011-qgn013uh0dpdv3t2ksotobg3i8112btn.apps.googleusercontent.com',
+    #(chudson):add additional desktop app type clientID
+    '1054993791011-vndct6i0bj5ubf55j6smthnbfclcj547.apps.googleusercontent.com',
+    # a debug account to upload results
+    '101238498408187417812',
+]
+
+_DISABLED_CHROMIUM_OAUTH_CLIENT_ID_ALLOWLIST = [
     # This oauth client id is from Pinpoint.
     '62121018386-aqdfougp0ddn93knqj6g79vvn42ajmrg.apps.googleusercontent.com',
     # This oauth client id is from the 'chromeperf' API console.

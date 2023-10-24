@@ -13,6 +13,18 @@ from google.auth import app_engine
 class InternalServerError(Exception):
   """An error indicating that something unexpected happens."""
 
+class MockSheriffConfigClient(object):
+  def Match(self, path, check=False):
+    from dashboard.models import subscription
+    return [subscription.Subscription(name='mock_sheriff',
+                                  auto_triage_enable=True,
+                                  auto_bisect_enable=True)], None
+
+  def List(self, check=False):
+    return [], None
+
+  def Update(self, check=False):
+    return True, None
 
 def GetSheriffConfigClient():
   """Get a cached SheriffConfigClient instance.
@@ -21,7 +33,7 @@ def GetSheriffConfigClient():
   """
   # pylint: disable=protected-access
   if not hasattr(GetSheriffConfigClient, '_client'):
-    GetSheriffConfigClient._client = SheriffConfigClient()
+    GetSheriffConfigClient._client = MockSheriffConfigClient()
   return GetSheriffConfigClient._client
 
 
