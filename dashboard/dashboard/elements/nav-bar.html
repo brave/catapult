@@ -119,10 +119,13 @@ found in the LICENSE file.
 
     <nav id="navbar">
       <ul class="menu">
+<!--
         <li id="demo">Demo!</li>
         <li><a href="/">Home</a></li>
         <li><a href="/alerts">Alerts</a></li>
+-->
         <li><a href="/report">Browse Graphs</a></li>
+<!--
         <li><a href="https://code.google.com/p/chromium/issues/list?q=label%3AType-Bug-Regression+label%3APerformance&amp;sort=-id"
                target="_blank">Perf Bugs</a></li>
         <li>Other Pages<iron-icon icon="arrow-drop-down"></iron-icon>
@@ -153,6 +156,7 @@ found in the LICENSE file.
                    target="_blank">Benchmark Owners Spreadsheet</a></li>
           </ul>
         </li>
+-->
 
         <template is="dom-if" if="{{isAdmin}}">
           <li>Admin<iron-icon icon="arrow-drop-down"></iron-icon>
@@ -184,7 +188,7 @@ Polymer({
           }
         }.bind(this));
 
-    if (window.location.hostname !== 'chromeperf.appspot.com') {
+    if (!window.location.hostname.endsWith('.appspot.com')) {
       this.$.demo.style.display = 'list-item';
       this.$.demo.style.color = 'black';
       window.document.body.style.border = '3px solid #0f0';
