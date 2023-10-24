@@ -13,6 +13,9 @@ jobs:
       - id: 'replace-strings'
         run: brave/replace_strings.sh
 
+      - name: npm audit fix
+        run: cd common/node_runner/node_runner/ && npm audit fix
+
       - id: 'auth'
         uses: 'google-github-actions/auth@v1.1.1'
         with:

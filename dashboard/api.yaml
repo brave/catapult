@@ -12,9 +12,9 @@ automatic_scaling:
   # keep around 10 instances at the ready to handle incoming requests better
   # from a "cold start".
   max_concurrent_requests: 20
-  max_instances: 150
   max_pending_latency: automatic
-  min_instances: 3
+  min_instances: 0
+  max_instances: 3
   target_cpu_utilization: 0.8
 
 env_variables:

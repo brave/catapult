@@ -8,9 +8,9 @@ instance_class: F4_1G
 
 automatic_scaling:
   max_concurrent_requests: 5
-  max_instances: 300
+  max_instances: 5
   max_pending_latency: automatic
-  min_instances: 6
+  min_instances: 0
   target_cpu_utilization: 0.8
 
 env_variables:
