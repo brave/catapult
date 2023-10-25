@@ -136,6 +136,25 @@ found in the LICENSE file.
 <body>
   <nav-bar></nav-bar>
   <div id="content">
+    <h1>Bots</h1>
+    <h2>Windows</h2>
+    <div><a href="https://ci.brave.com/job/brave-browser-test-perf-windows/" target="_blank">Jenkins builds</a></div>
+    <div><b>win11-hp-laptop-typical</b>: Brave/Chrome, "typical" prebuilt profile</div>
+
+    <h2>Mac</h2>
+    <div><a href="https://ci.brave.com/job/brave-browser-test-perf-macos/" target="_blank">Jenkins builds</a></div>
+    <div><b>mac-mini-m1-typical</b>: Brave, "typical" prebuilt profile</div>
+    <div><b>mac-mini-x64-typical</b>: Brave/Chrome, "typical" prebuilt profile</div>
+    <div><b>mac-mini-x64-online</b>: Brave, --use-live-sites. A fresh profile with an active internet connection.</div>
+
+    <h2>Android</h2>
+    <div><a href="https://ci.brave.com/job/brave-browser-test-perf-android/" target="_blank">Jenkins builds</a></div>
+    <div><b>pixel4</b>: Brave, a clean profile</div>
+
+    <h3>Links</h3>
+    <div><a href="https://github.com/brave/brave-core/tree/master/tools/perf/configs/dashboard" target="_blank">Perf configurations</a></div>
+    <div><a href="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions.json" target="_blank">Chrome for testing good revisions</a></div>
+    <!--
     <h2>Top {{num_changes}} improvements in the last {{num_days}} days
     for {{sheriff_name}}</h2>
     {{anomaly_table(improvements, false)}}
@@ -143,6 +162,7 @@ found in the LICENSE file.
     <h2>Top {{num_changes}} regressions in the last {{num_days}} days
     for {{sheriff_name}}</h2>
     {{anomaly_table(regressions)}}
+    -->
   </div>
   </body>
 </html>
