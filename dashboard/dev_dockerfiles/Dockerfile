@@ -4,8 +4,6 @@ ARG PROTOBUF_VERSION=3.6.1.3-2
 
 ENV PATH=/usr/local/depot_tools:${PATH}
 
-# TODO(atuchin): do we need to set up the version manually?
-# ENV VERSION=1005
 
 # The latest version is in sid repo. So need to specify the
 # version of dependency to avoid version conflix if you want

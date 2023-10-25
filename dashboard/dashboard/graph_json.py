@@ -466,6 +466,7 @@ def _FlotSeries(index, test):
 
 def _GetSkiaUrl(test_metadatas, start_time: datetime.datetime,
                 end_time: datetime.datetime):
+  return None # Brave doesn't support skia
   if len(test_metadatas) == 0:
     logging.info('_GetSkiaUrl received test_metadatas of length 0.')
     return None

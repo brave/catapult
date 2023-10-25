@@ -12,6 +12,7 @@ import logging
 from google.appengine.api import wrap_wsgi_app
 import google.cloud.logging
 try:
+  raise ImportError('googleclouddebugger is disabled in Brave')
   import googleclouddebugger
   googleclouddebugger.enable(breakpoint_enable_canary=True)
 except ImportError:
