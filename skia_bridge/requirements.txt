@@ -20,6 +20,6 @@ python-dateutil>=2.8.2
 # ssl to support OPENSSL v1.1.1+. The current ssl in Python 3.7 runtime
 # only support 1.0.2. Using an older version of urllib3 before the ssl is
 # updated.
-urllib3==1.26.1
+urllib3==1.26.18
 
 Werkzeug==2.2.2
