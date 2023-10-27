@@ -1,0 +1,11 @@
+{
+  "extends": [
+    "local>brave/renovate-config"
+  ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "prConcurrentLimit": 4,
+  "reviewersFromCodeOwners": true
+}
