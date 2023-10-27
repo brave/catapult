@@ -13,6 +13,7 @@ REPLACES=(
 # UI changes
   "s/Chrome Performance/Brave Performance/g"
   "s/signed-in google.com accounts/signed-in brave.com accounts/g"
+  "s/chromium.org account or a google.com/brave.com/g"
 
 # Replace emails just in case
   "s/@google.com/@brave.com/g"

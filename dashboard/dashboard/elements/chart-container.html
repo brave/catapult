@@ -2306,6 +2306,23 @@ triaging functionality in the chart.
       if ('a_os_detail_vers' in annotation) {
         this.$.tooltip.osDetailVers = annotation.a_os_detail_vers
       }
+
+      if ('r_v8_rev' in annotation) {
+        if (annotation.r_v8_rev.startsWith('0.')) {
+          this.$.tooltip.braveTag = 'v' + annotation.r_v8_rev.substring(2)
+        }
+        else if ('a_build_uri' in annotation) {
+          // The old format, parse from a_build_uri
+          const m = annotation.a_build_uri.match(/\/tag\/(v[\d|\.]+)\)/)
+          if (m != undefined)
+            this.$.tooltip.braveTag = m[1]
+        }
+      }
+      if ('r_webrtc_git' in annotation) {
+        if (annotation.r_webrtc_git.includes('.'))
+          this.$.tooltip.chromiumTag = annotation.r_webrtc_git
+          this.$.tooltip.chromiumUrl = `https://sourcegraph.com/github.com/chromium/chromium/-/compare/...${this.$.tooltip.chromiumTag}`
+      }
       this.$.tooltip.links = this.getTooltipLinks(annotation, series.path,
           pointId);
       if (annotation.timestamp) {
@@ -2369,6 +2386,11 @@ triaging functionality in the chart.
       * Reset the chart-tooltip's properties.
       */
     resetTooltip() {
+      // Brave:
+      this.$.tooltip.braveTag = null;
+      this.$.tooltip.chromiumTag = null;
+      this.$.tooltip.chromiumUrl = null;
+
       this.$.tooltip.testPath = null;
       this.$.tooltip.value = null;
       this.$.tooltip.stddev = null;
