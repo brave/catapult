@@ -29,7 +29,7 @@ MAX_WINDOW_SIZE = 50
 
 # Minimum number of points in a segment. This can help filter out erroneous
 # results by ignoring results that were found from looking at too few points.
-MIN_SEGMENT_SIZE = 6
+MIN_SEGMENT_SIZE = 2
 
 # Minimum absolute difference between medians before and after.
 MIN_ABSOLUTE_CHANGE = 0

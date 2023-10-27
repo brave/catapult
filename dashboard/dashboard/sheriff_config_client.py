@@ -13,15 +13,24 @@ from google.auth import app_engine
 class InternalServerError(Exception):
   """An error indicating that something unexpected happens."""
 
-class MockSheriffConfigClient(object):
+class BraveSheriffConfigClient(object):
   def Match(self, path, check=False):
+    import logging # TODO(atuchin): remove
+    logging.info('BraveSheriffConfigClient::Match %s' % path)
     from dashboard.models import subscription
-    return [subscription.Subscription(name='mock_sheriff',
+    return [subscription.Subscription(name='test_sheriff',
                                   auto_triage_enable=True,
-                                  auto_bisect_enable=True)], None
+                                  auto_bisect_enable=False,
+                                  notification_email='matuchin@brave.com',
+                                  )], None
 
   def List(self, check=False):
-    return [], None
+    from dashboard.models import subscription
+    return [subscription.Subscription(name='test_sheriff',
+                                  auto_triage_enable=True,
+                                  auto_bisect_enable=False,
+                                  notification_email='matuchin@brave.com',
+                                  )], None
 
   def Update(self, check=False):
     return True, None
@@ -33,7 +42,7 @@ def GetSheriffConfigClient():
   """
   # pylint: disable=protected-access
   if not hasattr(GetSheriffConfigClient, '_client'):
-    GetSheriffConfigClient._client = MockSheriffConfigClient()
+    GetSheriffConfigClient._client = BraveSheriffConfigClient()
   return GetSheriffConfigClient._client
 
 

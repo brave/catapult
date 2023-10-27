@@ -89,38 +89,10 @@ def _EmailSheriff(sheriff, test_key, anomaly_key):
   email_sheriff.EmailSheriff(sheriff, test_entity, anomaly_entity)
 
 
-class BraveSheriffConfigClient(object):
-  def Match(self, path, check=False):
-    logging.info('BraveSheriffConfigClient::Match %s' % path)
-    from dashboard.models import subscription
-    return [subscription.Subscription(name='test_sheriff',
-                                  auto_triage_enable=True,
-                                  auto_bisect_enable=False,
-                                  notification_email='matuchin@brave.com',
-                                  )], None
-
-  def List(self, check=False):
-    return [], None
-
-  def Update(self, check=False):
-    return True, None
-
-def GetSheriffConfigClient():
-  """Get a cached SheriffConfigClient instance.
-  Most code should use this rather than constructing a SheriffConfigClient
-  directly.
-  """
-  # pylint: disable=protected-access
-  if not hasattr(GetSheriffConfigClient, '_client'):
-    GetSheriffConfigClient._client = BraveSheriffConfigClient()
-  return GetSheriffConfigClient._client
-
-
 @ndb.tasklet
 def _ProcessTestStat(test, stat, rows, ref_rows):
   # If there were no rows fetched, then there's nothing to analyze.
 
-  raise ndb.Return(None)
   if not rows:
     logging.error('No rows fetched for %s', test.test_path)
     raise ndb.Return(None)
@@ -129,6 +101,7 @@ def _ProcessTestStat(test, stat, rows, ref_rows):
   # TODO(crbug/1158326): Use the data from the git-hosted anomaly configuration
   # instead of the provided config.
   # Get all the sheriff from sheriff-config match the path
+  from dashboard.sheriff_config_client import GetSheriffConfigClient
   client = GetSheriffConfigClient()
   subscriptions, err_msg = client.Match(test.test_path)
 
