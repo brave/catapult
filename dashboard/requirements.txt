@@ -31,4 +31,4 @@ six==1.15.0
 
 uritemplate==3.0.1
 urllib3==1.26.6
-Werkzeug==1.0.1
+Werkzeug==3.0.1
