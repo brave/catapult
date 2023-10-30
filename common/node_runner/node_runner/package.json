@@ -58,7 +58,7 @@
     "redux": "^4.0.0",
     "sinon": "^7.2.3",
     "vulcanize": "^1.16.0",
-    "webpack": "^4.16.1",
+    "webpack": "^5.89.0",
     "webpack-command": "^0.4.1",
     "polymer-bundler": "^4.0.10"
   }
