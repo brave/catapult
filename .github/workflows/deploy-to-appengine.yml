@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
 
       - id: 'replace-strings'
         run: brave/replace_strings.sh
@@ -20,15 +20,15 @@ jobs:
           npm audit fix
 
       - id: 'auth'
-        uses: 'google-github-actions/auth@v1.1.1'
+        uses: 'google-github-actions/auth@35b0e87d162680511bf346c299f71c9c5c379033' # v1.1.1
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY}}'
       - name: Setup Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1.1.1
+        uses: google-github-actions/setup-gcloud@e30db14379863a8c79331b04a9969f4c1e225e0b # v1.1.1
         with:
           project_id: 'brave-perf-dashboard'
       - name: Set up Python 3 and deploy via script
-        uses: actions/setup-python@v4.7.1
+        uses: actions/setup-python@65d7f2d534ac1bc67fcd62888c5f4f3d2cb2b236 # v4.7.1
         with:
           python-version: '3.7'
       - run: python dashboard/bin/deploy --promote app.yaml api.yaml upload.yaml upload-processing.yaml dispatch.yaml index.yaml
