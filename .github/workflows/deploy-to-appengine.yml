@@ -24,13 +24,14 @@ jobs:
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY}}'
       - name: Setup Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@e30db14379863a8c79331b04a9969f4c1e225e0b # v1.1.1
+        uses: google-github-actions/setup-gcloud@5a5f7b85fca43e76e53463acaa9d408a03c98d3a # v2.0.1
         with:
           project_id: 'brave-perf-dashboard'
+          version: '453.0.0'
       - name: Set up Python 3 and deploy via script
         uses: actions/setup-python@65d7f2d534ac1bc67fcd62888c5f4f3d2cb2b236 # v4.7.1
         with:
-          python-version: '3.7'
+          python-version: '3.8'
       - run: python dashboard/bin/deploy --promote app.yaml api.yaml upload.yaml upload-processing.yaml dispatch.yaml index.yaml
         env:
           VERSION: ${{github.run_number}}
