@@ -26,7 +26,7 @@ from dashboard.models import graph_data
 from dashboard.models import histogram
 from dashboard.models import subscription
 from dashboard.services import perf_issue_service_client
-from dashboard.sheriff_config_client import SheriffConfigClient
+from dashboard.sheriff_config_client import GetSheriffConfigClient
 from tracing.value.diagnostics import reserved_infos
 
 # Number of points to fetch and pass to FindChangePoints. A different number
@@ -93,8 +93,6 @@ def _EmailSheriff(sheriff, test_key, anomaly_key):
 def _ProcessTestStat(test, stat, rows, ref_rows):
   # If there were no rows fetched, then there's nothing to analyze.
 
-  #TODO(atuchin): support MockSheriffConfigClient?
-  raise ndb.Return(None)
   if not rows:
     logging.error('No rows fetched for %s', test.test_path)
     raise ndb.Return(None)
@@ -103,7 +101,7 @@ def _ProcessTestStat(test, stat, rows, ref_rows):
   # TODO(crbug/1158326): Use the data from the git-hosted anomaly configuration
   # instead of the provided config.
   # Get all the sheriff from sheriff-config match the path
-  client = SheriffConfigClient()
+  client = GetSheriffConfigClient()
   subscriptions, err_msg = client.Match(test.test_path)
 
   # Breaks the process when Match failed to ensure find_anomaly do the best

@@ -83,19 +83,18 @@ was just clicked.
           </div>
 
           <div>
-            <span hidden$={{!braveTag}}>Tag: <a target="_blank" href="https://github.com/brave/brave-core/commits/{{braveTag}}">{{braveTag}}</a></span><br>
-            <span hidden$={{!chromiumTag}}>Chromium: <a target="_blank" href="{{chromiumUrl}}">{{chromiumTag}}</a></span><br>
+            <span hidden$={{!braveTag}}>Tag: <a target="_blank" href="https://github.com/brave/brave-browser/releases/{{braveTag}}">{{braveTag}}</a></span><br>
             <span hidden$={{!pointId}}>Point ID: {{pointId}}</span><br>
             <span hidden$={{!timestamp}}>Time added: {{timestamp}}</span><br>
             <span hidden$={{!botId}}>Test Bot(s): {{botId}}</span><br>
-            <!-- <span hidden$={{!osDetailVers}}>OS Version: {{osDetailVers}}</span> -->
+            <span hidden$={{!osDetailVers}}>OS Version: {{osDetailVers}}</span>
           </div>
 
           <template is="dom-if" if="{{bugId}}">
             <div>
               <span hidden$={{alertInvalidOrIgnored}}>Bug ID:
                 <b>
-                  <a target="_blank" href="https://github.com/brave/brave-browser/{{bugId}}">
+                  <a target="_blank" href="http://crbug.com/{{projectId}}/{{bugId}}">
                     {{projectId}}:{{bugId}}
                   </a>
                 </b>

@@ -62,6 +62,7 @@ MONORAIL_PROJECTS = [
     'oss-fuzz', 'pdfium', 'pigweed', 'project-zero', 'skia', 'swiftshader',
     'tint', 'v8', 'webm', 'webp', 'webports', 'webrtc'
 ]
+MONORAIL_PROJECTS = ['brave-browser']
 
 
 class _SimpleCache(

@@ -236,6 +236,39 @@ def _UpdateRevisionMap(revision_map,
         row, anomaly_annotation_map)
 
 
+import re
+def _BraveProcessPoint(row_dict, point_info):
+  for name, val in row_dict.items():
+    if name == 'r_brave_tag':
+      point_info['r_brave_tag'] = val
+    elif name == 'r_chrome_version':
+      point_info['r_chrome_version'] = val
+    elif name == 'timestamp':
+      point_info['timestamp'] = val
+    elif name == 'a_build_uri':
+      point_info['a_build_uri'] = val
+
+  if not 'r_brave_tag' in point_info:
+    v8_rev = six.ensure_str(row_dict.get('r_v8_rev'))
+    build_uri = six.ensure_str(row_dict.get('a_build_uri'))
+    if v8_rev is not None and v8_rev.startswith('0.'):
+      # Option 1
+      point_info['r_brave_tag'] = six.ensure_binary('v' + v8_rev[2:])
+    elif build_uri is not None:
+      # Option 2
+      m = re.search(r'/tag/(v[\d|\.]+)\)', build_uri)
+      if m is not None:
+        point_info['r_brave_tag'] = six.ensure_binary(m.group(1))
+  if not 'r_chrome_version' in point_info:
+    # Option 1
+    webrtc_git = row_dict.get('r_webrtc_git')
+    if webrtc_git is not None and webrtc_git.find(b'.') != -1:
+      point_info['r_chrome_version'] = webrtc_git
+
+    point_info.pop('a_tracing_uri', None)
+
+  return point_info
+
 def _PointInfoDict(row, anomaly_annotation_map):
   """Makes a dict of properties of one Row."""
   point_info = {
@@ -252,6 +285,7 @@ def _PointInfoDict(row, anomaly_annotation_map):
     anomaly_entity = anomaly_annotation_map.get(row.revision)
     point_info['g_anomaly'] = alerts.GetAnomalyDict(anomaly_entity)
   row_dict = row.to_dict()
+  return _BraveProcessPoint(row_dict, point_info)
   for name, val in row_dict.items():
     if name.startswith('r_'):
       point_info[name] = val
