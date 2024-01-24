@@ -11,12 +11,47 @@ from __future__ import print_function
 
 from dashboard.models import subscription
 
-def _GetBraveSubscriptions():
+def _GetTopMetricsSubscription():
+  return subscription.Subscription(name='Top Metrics',
+                                    monorail_project_id='brave-browser',
+                                    auto_triage_enable=True,
+                                    auto_bisect_enable=False)
+def _GetOtherMetricsSubscription():
   return [subscription.Subscription(name='Brave Sheriff',
                                     monorail_project_id='brave-browser',
                                     auto_triage_enable=True,
                                     auto_bisect_enable=False)]
 
+def _IsTopMetrics(path: str) -> bool:
+  TOP_METRICS_PATTERNS = [
+    # Memory:
+    'reported_by_os:private_footprint_size/',
+    'reported_by_chrome:allocated_objects_size/',
+
+    # CPU:
+    'cpuTime:',
+
+    # JS performance:
+    'speedometer2/RunsPerMinute/',
+    'rectsBasedSpeedIndex',
+
+    # apk
+    'apk_size/InstallSize',
+
+    # Page loading:
+    'timeToOnload/'
+    'timeToFirstMeaningfulPaint/'
+    'cpuTimeToFirstMeaningfulPaint/'
+
+    # Process number
+    'ChildProcess.Launched.UtilityProcessHash#count',
+    'all_processes:process_count',
+  ]
+  for pattern in TOP_METRICS_PATTERNS:
+    if path in pattern:
+      return True
+
+  return False
 
 class InternalServerError(Exception):
   """An error indicating that something unexpected happens."""
@@ -37,10 +72,13 @@ class BraveSheriffConfigClient(object):
 
     # TODO: fix backend errors
 
-    return _GetBraveSubscriptions(), None
+    if _IsTopMetrics(path):
+      return [_GetTopMetricsSubscription()], None
+    else:
+      return [_GetOtherMetricsSubscription()], None
 
   def List(self, check=False):
-    return _GetBraveSubscriptions(), None
+    return [_GetTopMetricsSubscription(), _GetOtherMetricsSubscription()], None
 
   def Update(self, check=False):
     return True, None
