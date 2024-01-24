@@ -11,16 +11,24 @@ from __future__ import print_function
 
 from dashboard.models import subscription
 
+def _GetAnomalyConfigs():
+  config = subscription.AnomalyConfig()
+  config.min_segment_size = 2
+  return [config]
+
 def _GetTopMetricsSubscription():
   return subscription.Subscription(name='Top Metrics',
-                                    monorail_project_id='brave-browser',
-                                    auto_triage_enable=True,
-                                    auto_bisect_enable=False)
+                                   monorail_project_id='brave-browser',
+                                   anomaly_configs = _GetAnomalyConfigs(),
+                                   auto_triage_enable=True,
+                                   auto_bisect_enable=False)
+
 def _GetOtherMetricsSubscription():
-  return [subscription.Subscription(name='Brave Sheriff',
-                                    monorail_project_id='brave-browser',
-                                    auto_triage_enable=True,
-                                    auto_bisect_enable=False)]
+  return subscription.Subscription(name='Brave Sheriff',
+                                   monorail_project_id='brave-browser',
+                                   anomaly_configs = _GetAnomalyConfigs(),
+                                   auto_triage_enable=True,
+                                   auto_bisect_enable=False)
 
 def _IsTopMetrics(path: str) -> bool:
   TOP_METRICS_PATTERNS = [
