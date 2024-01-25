@@ -249,13 +249,14 @@ def _BraveProcessPoint(row_dict, point_info):
       point_info['a_build_uri'] = val
 
   if not 'r_brave_tag' in point_info:
-    v8_rev = six.ensure_str(row_dict.get('r_v8_rev'))
-    build_uri = six.ensure_str(row_dict.get('a_build_uri'))
-    if v8_rev is not None and v8_rev.startswith('0.'):
+    v8_rev = row_dict.get('r_v8_rev')
+    build_uri = row_dict.get('a_build_uri')
+    if v8_rev is not None and v8_rev.startswith(b'0.'):
       # Option 1
-      point_info['r_brave_tag'] = six.ensure_binary('v' + v8_rev[2:])
+      point_info['r_brave_tag'] = b'v' + v8_rev[2:]
     elif build_uri is not None:
       # Option 2
+      build_uri = six.ensure_str(build_uri)
       m = re.search(r'/tag/(v[\d|\.]+)\)', build_uri)
       if m is not None:
         point_info['r_brave_tag'] = six.ensure_binary(m.group(1))
