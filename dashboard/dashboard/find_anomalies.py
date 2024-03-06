@@ -390,6 +390,12 @@ def _GetBotIdForRevisionNumber(row_tuples, revision_number):
         return row.swarming_bot_id
   return None
 
+def _GetBraveCoreRevision(row_tuples, revision_number):
+  for _, row, _ in row_tuples:
+    if row.revision == revision_number:
+      if hasattr(row, 'r_brave_git') and row.r_brave_git:
+        return row.r_brave_git
+  return None
 
 @ndb.tasklet
 def _MakeAnomalyEntity(change_point, test, stat, rows, config, matching_sub):
@@ -418,6 +424,9 @@ def _MakeAnomalyEntity(change_point, test, stat, rows, config, matching_sub):
   median_after = change_point.median_after
   bot_id_before = _GetBotIdForRevisionNumber(rows, change_point.extended_start)
   bot_id_after = _GetBotIdForRevisionNumber(rows, change_point.extended_end)
+
+  display_start = _GetBraveCoreRevision(rows, change_point.extended_start)
+  display_end = _GetBraveCoreRevision(rows, change_point.extended_end)
 
   suite_key = test.key.id().split('/')[:3]
   suite_key = '/'.join(suite_key)

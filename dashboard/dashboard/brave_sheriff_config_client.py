@@ -9,7 +9,52 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
+
 from dashboard.models import subscription
+
+_TOP_METRICS_PATTERN = re.compile('|'.join([
+    # Memory:
+    'reported_by_os:private_footprint_size/',
+    'reported_by_chrome:allocated_objects_size/',
+
+    # CPU:
+    'cpuTime:',
+
+    # JS performance:
+    'speedometer2/RunsPerMinute',
+    'rectsBasedSpeedIndex',
+
+    # apk
+    'apk_size/TransferSize',
+    'apk_size/InstallSize',
+    'apk_size/InstallBreakdown',
+
+    # Startup
+    'Startup.FirstWebContents.MainNavigationStart',
+    'startup/navigationStart',
+
+    # Page loading:
+    'timeToOnload/',
+    'timeToFirstMeaningfulPaint/',
+    'cpuTimeToFirstMeaningfulPaint/',
+
+    # Process number
+    'ChildProcess.Launched.UtilityProcessHash#count',
+    'all_processes:process_count',
+]))
+
+_IGNORE_PATTERN = re.compile('|'.join([
+  '^BravePerf/test-agent',
+  '/Metric_duration',
+  '_avg',
+  '_sum',
+  '_min',
+  '_max',
+  '_std',
+  r'^([^/]+/){2}system_health.\w+(/[^/]+){1,2}$',
+  r'^([^/]+/){2}loading.[^/]+(/[^/]+){1,2}$',
+]))
 
 def _GetAnomalyConfigs():
   config = subscription.AnomalyConfig()
@@ -20,6 +65,7 @@ def _GetTopMetricsSubscription():
   return subscription.Subscription(name='Top Metrics',
                                    monorail_project_id='brave-browser',
                                    anomaly_configs = _GetAnomalyConfigs(),
+                                   visibility = subscription.VISIBILITY.PUBLIC,
                                    auto_triage_enable=True,
                                    auto_bisect_enable=False)
 
@@ -27,60 +73,20 @@ def _GetOtherMetricsSubscription():
   return subscription.Subscription(name='Brave Sheriff',
                                    monorail_project_id='brave-browser',
                                    anomaly_configs = _GetAnomalyConfigs(),
+                                   visibility = subscription.VISIBILITY.PUBLIC,
                                    auto_triage_enable=True,
                                    auto_bisect_enable=False)
 
-def _IsTopMetrics(path: str) -> bool:
-  TOP_METRICS_PATTERNS = [
-    # Memory:
-    'reported_by_os:private_footprint_size/',
-    'reported_by_chrome:allocated_objects_size/',
-
-    # CPU:
-    'cpuTime:',
-
-    # JS performance:
-    'speedometer2/RunsPerMinute/',
-    'rectsBasedSpeedIndex',
-
-    # apk
-    'apk_size/InstallSize',
-
-    # Page loading:
-    'timeToOnload/'
-    'timeToFirstMeaningfulPaint/'
-    'cpuTimeToFirstMeaningfulPaint/'
-
-    # Process number
-    'ChildProcess.Launched.UtilityProcessHash#count',
-    'all_processes:process_count',
-  ]
-  for pattern in TOP_METRICS_PATTERNS:
-    if path in pattern:
-      return True
-
-  return False
 
 class InternalServerError(Exception):
   """An error indicating that something unexpected happens."""
 
 class BraveSheriffConfigClient(object):
   def Match(self, path, check=False):
-    if path.find('test-agent') != -1:
+    if _IGNORE_PATTERN.search(path) is not None:
       return [], None
 
-    if path.find('metrics_duration') != -1:
-      return [], None
-
-    if (path.find('_avg') != -1 or
-        path.find('_sum') != -1 or
-        path.find('_min') != -1 or
-        path.find('_max') != -1):
-      return [], None
-
-    # TODO: fix backend errors
-
-    if _IsTopMetrics(path):
+    if _TOP_METRICS_PATTERN.search(path) is not None:
       return [_GetTopMetricsSubscription()], None
     else:
       return [_GetOtherMetricsSubscription()], None

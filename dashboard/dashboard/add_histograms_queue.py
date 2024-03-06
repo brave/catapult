@@ -73,6 +73,19 @@ DIAGNOSTIC_NAMES_TO_ANNOTATION_NAMES = {
         'r_fuchsia_zircon_git',
     reserved_infos.REVISION_TIMESTAMPS.name:
         'r_revision_timestamp',
+
+    reserved_infos.BRAVE_REVISIONS.name:
+        'r_brave_git',
+    reserved_infos.BRAVE_TAG.name:
+        'a_brave_tag',
+    reserved_infos.BRAVE_VARIATIONS_REVISIONS.name:
+        'r_brave_vars_git',
+    reserved_infos.BRAVE_JOB_NAME.name:
+        'a_brave_job_name',
+    reserved_infos.BRAVE_JOB_ID.name:
+        'a_brave_id',
+    reserved_infos.BRAVE_TRACE_PATH.name:
+        'a_brave_trace_path',
 }
 
 

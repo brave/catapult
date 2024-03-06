@@ -2308,8 +2308,10 @@ triaging functionality in the chart.
       }
 
       // Brave:
-      if ('r_brave_tag' in annotation) {
-        this.$.tooltip.braveTag = annotation.r_brave_tag
+      for (const key in annotation) {
+        if (key.match(/^._brave/)) {
+          this.$.tooltip[key] = annotation.key
+        }
       }
 
       this.$.tooltip.links = this.getTooltipLinks(annotation, series.path,
@@ -2376,7 +2378,11 @@ triaging functionality in the chart.
       */
     resetTooltip() {
       // Brave:
-      this.$.tooltip.braveTag = null;
+      for (const key in this.$.tooltip) {
+        if (key.match(/^._brave/)) {
+          this.$.tooltip[key] = null
+        }
+      }
 
       this.$.tooltip.testPath = null;
       this.$.tooltip.value = null;

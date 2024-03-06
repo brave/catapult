@@ -238,35 +238,42 @@ def _UpdateRevisionMap(revision_map,
 
 import re
 def _BraveProcessPoint(row_dict, point_info):
-  for name, val in row_dict.items():
-    if name == 'r_brave_tag':
-      point_info['r_brave_tag'] = val
-    elif name == 'r_chrome_version':
-      point_info['r_chrome_version'] = val
-    elif name == 'timestamp':
-      point_info['timestamp'] = val
-    elif name == 'a_build_uri':
-      point_info['a_build_uri'] = val
+  keys_to_delete = ['a_tracing_uri',
+                    'a_os_detail_vers',
+                    'a_bot_id',
+                    'r_v8_rev',
+                    'r_commit_pos',
+                    'r_webrtc_git',
+  ]
+  for key in keys_to_delete:
+    point_info.pop(key, None)
 
-  if not 'r_brave_tag' in point_info:
-    v8_rev = row_dict.get('r_v8_rev')
+
+  for name, val in row_dict.items():
+    if name.startswith('a_brave_'):
+      point_info[name] = val
+
+  # Fallback options for the old formats. TODO: remove it after some time
+  if not 'a_brave_tag' in point_info:
+    # Option 1: parse brave tag from a_build_uri
     build_uri = row_dict.get('a_build_uri')
-    if v8_rev is not None and v8_rev.startswith(b'0.'):
-      # Option 1
-      point_info['r_brave_tag'] = b'v' + v8_rev[2:]
-    elif build_uri is not None:
-      # Option 2
+    if build_uri is not None:
       build_uri = six.ensure_str(build_uri)
       m = re.search(r'/tag/(v[\d|\.]+)\)', build_uri)
       if m is not None:
-        point_info['r_brave_tag'] = six.ensure_binary(m.group(1))
-  if not 'r_chrome_version' in point_info:
-    # Option 1
+        point_info['a_brave_tag'] = six.ensure_binary(m.group(1))
+        if 'r_chromium' in point_info:
+          point_info['r_brave_git'] = point_info['r_chromium']
+
+    # Option 2: parse data from r_v8_rev & r_webrtc_git
+    v8_rev = row_dict.get('r_v8_rev')
+    if v8_rev is not None and v8_rev.startswith(b'0.'):
+      point_info['a_brave_tag'] = b'v' + v8_rev[2:]
     webrtc_git = row_dict.get('r_webrtc_git')
     if webrtc_git is not None and webrtc_git.find(b'.') != -1:
-      point_info['r_chrome_version'] = webrtc_git
-
-    point_info.pop('a_tracing_uri', None)
+      if 'r_chromium' in point_info:
+        point_info['r_brave_git'] = point_info['r_chromium']
+      point_info['r_chromium'] = webrtc_git
 
   return point_info
 
@@ -286,7 +293,6 @@ def _PointInfoDict(row, anomaly_annotation_map):
     anomaly_entity = anomaly_annotation_map.get(row.revision)
     point_info['g_anomaly'] = alerts.GetAnomalyDict(anomaly_entity)
   row_dict = row.to_dict()
-  return _BraveProcessPoint(row_dict, point_info)
   for name, val in row_dict.items():
     if name.startswith('r_'):
       point_info[name] = val
@@ -300,7 +306,7 @@ def _PointInfoDict(row, anomaly_annotation_map):
       point_info['a_os_detail_vers'] = val
     elif name.startswith('a_') and _IsMarkdownLink(val):
       point_info[name] = val
-  return point_info
+  return _BraveProcessPoint(row_dict, point_info)
 
 
 def _IsMarkdownLink(value):
