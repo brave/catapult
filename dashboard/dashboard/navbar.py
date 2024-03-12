@@ -12,6 +12,11 @@ from dashboard.common import request_handler
 
 from flask import make_response, request
 
+from dashboard.common import stored_object
+
+def _GetBraveDashboards():
+  BRAVE_DASHBOARDS_KEY = 'brave_dashboards'
+  return stored_object.Get(BRAVE_DASHBOARDS_KEY) or []
 
 def NavbarHandlerPost():
   """XHR endpoint to fill in navbar fields."""
@@ -21,6 +26,7 @@ def NavbarHandlerPost():
   res = make_response(
       json.dumps({
           'login_url': template_values['login_url'],
+          'dashboards': _GetBraveDashboards(),
           'is_admin': template_values['is_admin'],
           'display_username': template_values['display_username'],
           'is_internal_user': template_values['is_internal_user']
