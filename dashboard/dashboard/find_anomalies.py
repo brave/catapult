@@ -51,6 +51,61 @@ def ProcessTestsAsync(test_keys):
   yield [_ProcessTest(k) for k in test_keys]
 
 
+import datetime
+_CHECK_INTERVAL = datetime.timedelta(minutes=1)
+_BRAVE_SHERRIF = 'Top metrics'
+
+def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
+  """Fetches recent untriaged anomalies asynchronously from all sheriffs."""
+  # Previous code process anomalies by sheriff with LIMIT. It prevents some
+  # extreme cases that anomalies produced by a single sheriff prevent other
+  # sheriff's anomalies being processed. But it introduced some unnecessary
+  # complex to system and considered almost impossible happened.
+  logging.info('Fetching untriaged anomalies fired after %s',
+               min_timestamp_to_check)
+  _, _ , count = anomaly.Anomaly.QueryAsync(
+      keys_only=True,
+      limit=1000,
+      recovered=False,
+      subscriptions=[_BRAVE_SHERRIF],
+      is_improvement=False,
+      bug_id='', # untriaged
+      min_timestamp=min_timestamp_to_check)
+  logging.info('untriaged count %s', count)
+  return count
+
+@ndb.tasklet
+def _MaybeSendEmail():
+  LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
+  BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
+  from dashboard.common import stored_object
+  now = datetime.datetime.now() - _CHECK_INTERVAL
+  last_checked = yield stored_object.GetAsync(LAST_CHECK_KEY) or None
+  if last_checked is not None and now - last_checked > _CHECK_INTERVAL:
+    return
+  stored_object.SetAsync(LAST_CHECK_KEY, now)
+
+  count = _GetUntriagedAnomaliesCount(last_checked)
+  if count == 0:
+    return
+
+  from google.appengine.api import mail
+  from six.moves.urllib.parse import urlencode
+  emails = yield stored_object.GetAsync(BRAVE_EMAILS_TO_NOTIFY_KEY)
+  if emails is None:
+    logging.error('No emails to notify')
+    return
+
+  query = urlencode({'sheriff': _BRAVE_SHERRIF})
+  body = f'Visit https://brave-perf-dashboard.appspot.com/alerts?{query)} for details'
+
+  mail.send_mail(
+      sender='perf-alerts@brave.com',
+      to=emails,
+      subject=f'New perf {count} alert(s) detected',
+      body=body)
+  logging.info('Sent a mail to %s', emails)
+
 @ndb.tasklet
 def _ProcessTest(test_key):
   """Processes a test to find new anomalies.
@@ -81,6 +136,7 @@ def _ProcessTest(test_key):
       logging.info('Processing test: %s', test_key.id())
       yield _ProcessTestStat(test, s, rows, ref_rows_by_stat.get(s))
 
+  yield _MaybeSendEmail()
 
 def _EmailSheriff(sheriff, test_key, anomaly_key):
   test_entity = test_key.get()
