@@ -2310,7 +2310,7 @@ triaging functionality in the chart.
       // Brave:
       for (const key in annotation) {
         if (key.match(/^._brave/)) {
-          this.$.tooltip[key] = annotation.key
+          this.$.tooltip[key] = annotation[key]
         }
       }
 
