@@ -23,7 +23,7 @@ from dashboard.models import anomaly
 from dashboard.common import stored_object
 
 
-_CHECK_INTERVAL = datetime.timedelta(minutes=1)
+_CHECK_INTERVAL = datetime.timedelta(days=1)
 _BRAVE_SHERRIF = 'Top metrics'
 
 def GetBraveCoreRevision(row_tuples, revision_number):
@@ -53,18 +53,18 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
   return count
 
 def MaybeSendEmail():
-  LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
+  # LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
   BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
   now = datetime.datetime.now()
-  last_checked = stored_object.Get(LAST_CHECK_KEY) or None
-  if last_checked is not None:
-    delta = now - last_checked
-    logging.info('Time delta %s', delta)
-    if delta < _CHECK_INTERVAL:
-      return
-  stored_object.Set(LAST_CHECK_KEY, now)
+  # last_checked = stored_object.Get(LAST_CHECK_KEY) or None
+  # if last_checked is not None:
+  #   delta = now - last_checked
+  #   logging.info('Time delta %s', delta)
+  #   if delta < _CHECK_INTERVAL:
+  #     return
+  # stored_object.Set(LAST_CHECK_KEY, now)
 
-  count = _GetUntriagedAnomaliesCount(last_checked)
+  count = _GetUntriagedAnomaliesCount(datetime.datetime.now() - _CHECK_INTERVAL)
   if count == 0:
     return
 

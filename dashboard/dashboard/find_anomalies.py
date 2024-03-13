@@ -28,7 +28,7 @@ from dashboard.models import subscription
 from dashboard.services import perf_issue_service_client
 from dashboard.sheriff_config_client import GetSheriffConfigClient
 from tracing.value.diagnostics import reserved_infos
-from dashboard.brave_find_anomalies import GetBraveCoreRevision, MaybeSendEmail
+from dashboard.brave_anomalies import GetBraveCoreRevision
 
 # Number of points to fetch and pass to FindChangePoints. A different number
 # may be used if a test has a "max_window_size" anomaly config parameter.
@@ -51,7 +51,7 @@ def ProcessTestsAsync(test_keys):
   # Using a parallel yield here let's the tasklets for each _ProcessTest run
   # in parallel.
   yield [_ProcessTest(k) for k in test_keys]
-  deferred.defer(MaybeSendEmail)
+
 
 @ndb.tasklet
 def _ProcessTest(test_key):
