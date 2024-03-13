@@ -74,8 +74,8 @@ DIAGNOSTIC_NAMES_TO_ANNOTATION_NAMES = {
     reserved_infos.REVISION_TIMESTAMPS.name:
         'r_revision_timestamp',
 
-    reserved_infos.BRAVE_REVISIONS.name:
-        'r_brave_git',
+    reserved_infos.BRAVE_CHROME_VERSION.name:
+        'r_brave_chrome',
     reserved_infos.BRAVE_TAG.name:
         'a_brave_tag',
     reserved_infos.BRAVE_VARIATIONS_REVISIONS.name:

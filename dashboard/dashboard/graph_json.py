@@ -262,8 +262,6 @@ def _BraveProcessPoint(row_dict, point_info):
       m = re.search(r'/tag/(v[\d|\.]+)\)', build_uri)
       if m is not None:
         point_info['a_brave_tag'] = six.ensure_binary(m.group(1))
-        if 'r_chromium' in point_info:
-          point_info['r_brave_git'] = point_info['r_chromium']
 
     # Option 2: parse data from r_v8_rev & r_webrtc_git
     v8_rev = row_dict.get('r_v8_rev')
@@ -271,9 +269,7 @@ def _BraveProcessPoint(row_dict, point_info):
       point_info['a_brave_tag'] = b'v' + v8_rev[2:]
     webrtc_git = row_dict.get('r_webrtc_git')
     if webrtc_git is not None and webrtc_git.find(b'.') != -1:
-      if 'r_chromium' in point_info:
-        point_info['r_brave_git'] = point_info['r_chromium']
-      point_info['r_chromium'] = webrtc_git
+      point_info['r_brave_chrome'] = webrtc_git
 
   return point_info
 
