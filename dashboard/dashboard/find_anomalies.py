@@ -86,9 +86,9 @@ def _MaybeSendEmail():
   LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
   BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
   from dashboard.common import stored_object
-  now = datetime.datetime.now() - _CHECK_INTERVAL
+  now = datetime.datetime.now()
   last_checked = stored_object.Get(LAST_CHECK_KEY) or None
-  if last_checked is not None and now - last_checked > _CHECK_INTERVAL:
+  if last_checked is not None and now - last_checked < _CHECK_INTERVAL:
     return
   stored_object.Set(LAST_CHECK_KEY, now)
 
