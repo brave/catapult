@@ -83,7 +83,7 @@ DIAGNOSTIC_NAMES_TO_ANNOTATION_NAMES = {
     reserved_infos.BRAVE_JOB_NAME.name:
         'a_brave_job_name',
     reserved_infos.BRAVE_JOB_ID.name:
-        'a_brave_id',
+        'a_brave_job_id',
     reserved_infos.BRAVE_TRACE_PATH.name:
         'a_brave_trace_path',
 }

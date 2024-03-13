@@ -14,7 +14,7 @@ REPLACES=(
   "s/Chrome Performance/Brave Performance/g"
   "s/signed-in google.com accounts/signed-in brave.com accounts/g"
   "s/chromium.org account or a google.com/brave.com/g"
-  "s/crbug.com\/{{projectId}}\/{{bugId}}/github.com\/brave\/{{projectId}}\/issues\/{{bugId}}/g"
+  "s/crbug.com\/{{projectId}}\/{{bugId}}/github.com\/brave\/brave-browser\/issues\/{{bugId}}/g"
 
 # Replace emails just in case
   "s/@google.com/@brave.com/g"
