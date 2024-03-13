@@ -449,8 +449,8 @@ def _GetBotIdForRevisionNumber(row_tuples, revision_number):
 def _GetBraveCoreRevision(row_tuples, revision_number):
   for _, row, _ in row_tuples:
     if row.revision == revision_number:
-      if hasattr(row, 'r_brave_git') and row.r_brave_git:
-        return row.r_brave_git
+      if hasattr(row, 'a_brave_tag') and row.a_brave_tag:
+        return row.a_brave_tag
   return None
 
 @ndb.tasklet
