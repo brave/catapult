@@ -83,7 +83,7 @@ def _MaybeSendEmail():
   last_checked = yield stored_object.GetAsync(LAST_CHECK_KEY) or None
   if last_checked is not None and now - last_checked > _CHECK_INTERVAL:
     return
-  stored_object.SetAsync(LAST_CHECK_KEY, now)
+  yield stored_object.SetAsync(LAST_CHECK_KEY, now)
 
   count = _GetUntriagedAnomaliesCount(last_checked)
   if count == 0:
@@ -97,7 +97,7 @@ def _MaybeSendEmail():
     return
 
   query = urlencode({'sheriff': _BRAVE_SHERRIF})
-  body = f'Visit https://brave-perf-dashboard.appspot.com/alerts?{query)} for details'
+  body = f'Visit https://brave-perf-dashboard.appspot.com/alerts?{query} for details'
 
   mail.send_mail(
       sender='perf-alerts@brave.com',
