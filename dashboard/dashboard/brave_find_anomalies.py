@@ -48,7 +48,7 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
       subscriptions=[_BRAVE_SHERRIF],
       is_improvement=False,
       bug_id='', # untriaged
-      min_timestamp=min_timestamp_to_check)
+      min_timestamp=min_timestamp_to_check).get_result()
   logging.info('untriaged count %s', count)
   return count
 
