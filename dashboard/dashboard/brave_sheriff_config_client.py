@@ -45,7 +45,7 @@ _TOP_METRICS_PATTERN = re.compile('|'.join([
 ]))
 
 _IGNORE_PATTERN = re.compile('|'.join([
-  '^BravePerf/test-agent',
+  # '^BravePerf/test-agent',
   '/Metric_duration',
   '_avg',
   '_sum',
