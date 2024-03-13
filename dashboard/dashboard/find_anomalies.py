@@ -55,6 +55,13 @@ import datetime
 _CHECK_INTERVAL = datetime.timedelta(minutes=1)
 _BRAVE_SHERRIF = 'Top metrics'
 
+def _GetBraveCoreRevision(row_tuples, revision_number):
+  for _, row, _ in row_tuples:
+    if row.revision == revision_number:
+      if hasattr(row, 'a_brave_tag') and row.a_brave_tag:
+        return row.a_brave_tag
+  return None
+
 def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
   """Fetches recent untriaged anomalies asynchronously from all sheriffs."""
   # Previous code process anomalies by sheriff with LIMIT. It prevents some
@@ -80,10 +87,10 @@ def _MaybeSendEmail():
   BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
   from dashboard.common import stored_object
   now = datetime.datetime.now() - _CHECK_INTERVAL
-  last_checked = yield stored_object.GetAsync(LAST_CHECK_KEY) or None
+  last_checked = stored_object.Get(LAST_CHECK_KEY) or None
   if last_checked is not None and now - last_checked > _CHECK_INTERVAL:
     return
-  yield stored_object.SetAsync(LAST_CHECK_KEY, now)
+  stored_object.Set(LAST_CHECK_KEY, now)
 
   count = _GetUntriagedAnomaliesCount(last_checked)
   if count == 0:
@@ -91,7 +98,7 @@ def _MaybeSendEmail():
 
   from google.appengine.api import mail
   from six.moves.urllib.parse import urlencode
-  emails = yield stored_object.GetAsync(BRAVE_EMAILS_TO_NOTIFY_KEY)
+  emails = stored_object.Get(BRAVE_EMAILS_TO_NOTIFY_KEY)
   if emails is None:
     logging.error('No emails to notify')
     return
@@ -444,13 +451,6 @@ def _GetBotIdForRevisionNumber(row_tuples, revision_number):
     if row.revision == revision_number:
       if hasattr(row, 'swarming_bot_id') and row.swarming_bot_id:
         return row.swarming_bot_id
-  return None
-
-def _GetBraveCoreRevision(row_tuples, revision_number):
-  for _, row, _ in row_tuples:
-    if row.revision == revision_number:
-      if hasattr(row, 'a_brave_tag') and row.a_brave_tag:
-        return row.a_brave_tag
   return None
 
 @ndb.tasklet
