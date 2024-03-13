@@ -52,7 +52,6 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
   logging.info('untriaged count %s', count)
   return count
 
-@ndb.tasklet
 def MaybeSendEmail():
   LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
   BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'

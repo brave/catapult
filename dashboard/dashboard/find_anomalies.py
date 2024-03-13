@@ -45,12 +45,13 @@ def ProcessTests(test_keys):
   yield ProcessTestsAsync(test_keys)
 
 
+
 @ndb.tasklet
 def ProcessTestsAsync(test_keys):
   # Using a parallel yield here let's the tasklets for each _ProcessTest run
   # in parallel.
   yield [_ProcessTest(k) for k in test_keys]
-
+  deferred.defer(MaybeSendEmail)
 
 @ndb.tasklet
 def _ProcessTest(test_key):
@@ -82,7 +83,6 @@ def _ProcessTest(test_key):
       logging.info('Processing test: %s', test_key.id())
       yield _ProcessTestStat(test, s, rows, ref_rows_by_stat.get(s))
 
-  yield MaybeSendEmail()
 
 def _EmailSheriff(sheriff, test_key, anomaly_key):
   test_entity = test_key.get()
