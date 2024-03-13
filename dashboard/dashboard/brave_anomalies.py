@@ -24,7 +24,11 @@ from dashboard.common import stored_object
 import dashboard.brave_sheriff_config_client as brave_sheriff
 
 
-_CHECK_INTERVAL = datetime.timedelta(days=1)
+_NEW_CHECK_INTERVAL = datetime.timedelta(days=1)
+_TOTAL_CHECK_INTERVAL = datetime.timedelta(days=3)
+
+_LAST_TOTAL_CHECK_KEY = 'brave_anomaly_new_check_timestamp'
+_BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
 
 def GetBraveCoreRevision(row_tuples, revision_number):
   for _, row, _ in row_tuples:
@@ -49,26 +53,11 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
       is_improvement=False,
       bug_id='', # untriaged
       min_timestamp=min_timestamp_to_check).get_result()
-  logging.info('untriaged count %s', count)
+  logging.info('Got count %s', count)
   return count
 
-def MaybeSendEmail():
-  # LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
-  BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
-  now = datetime.datetime.now()
-  # last_checked = stored_object.Get(LAST_CHECK_KEY) or None
-  # if last_checked is not None:
-  #   delta = now - last_checked
-  #   logging.info('Time delta %s', delta)
-  #   if delta < _CHECK_INTERVAL:
-  #     return
-  # stored_object.Set(LAST_CHECK_KEY, now)
-
-  count = _GetUntriagedAnomaliesCount(datetime.datetime.now() - _CHECK_INTERVAL)
-  if count == 0:
-    return
-
-  emails = stored_object.Get(BRAVE_EMAILS_TO_NOTIFY_KEY)
+def _SendEmail(subject):
+  emails = stored_object.Get(_BRAVE_EMAILS_TO_NOTIFY_KEY)
   if emails is None:
     logging.error('No emails to notify')
     return
@@ -77,8 +66,27 @@ def MaybeSendEmail():
   body = f'Visit https://brave-perf-dashboard.appspot.com/alerts?{query} for details'
 
   mail.send_mail(
-      sender='perf-alerts@brave.com',
+      sender='alerts@brave-perf-dashboard.appspotmail.com',
       to=emails,
-      subject=f'New perf {count} alert(s) detected',
+      subject=subject,
       body=body)
   logging.info('Sent a mail to %s', emails)
+
+def MaybeSendEmail():
+  now = datetime.datetime.now()
+
+  new_count = _GetUntriagedAnomaliesCount(now - _NEW_CHECK_INTERVAL)
+  if new_count > 0:
+    _SendEmail(f'New perf {new_count} alert(s) detected')
+    stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)
+    return
+
+  last_total_checked = stored_object.Get(_LAST_TOTAL_CHECK_KEY) or None
+  if last_total_checked is not None:
+    delta = now - last_total_checked
+    logging.info('Total check delta %s', delta)
+    if delta > _TOTAL_CHECK_INTERVAL:
+      stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)
+      total = _GetUntriagedAnomaliesCount(None)
+      if total > 0:
+        _SendEmail(f'Perf {total} alert(s) need to be processed')
