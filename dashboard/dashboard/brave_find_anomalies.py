@@ -59,7 +59,8 @@ def MaybeSendEmail():
   now = datetime.datetime.now()
   last_checked = stored_object.Get(LAST_CHECK_KEY) or None
   if last_checked is not None:
-    logging.info('Time delta %s', now - last_checked)
+    delta = now - last_checked
+    logging.info('Time delta %s', delta)
     if delta < _CHECK_INTERVAL:
       return
   stored_object.Set(LAST_CHECK_KEY, now)
