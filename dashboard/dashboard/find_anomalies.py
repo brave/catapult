@@ -28,6 +28,7 @@ from dashboard.models import subscription
 from dashboard.services import perf_issue_service_client
 from dashboard.sheriff_config_client import GetSheriffConfigClient
 from tracing.value.diagnostics import reserved_infos
+from dashboard.brave_find_anomalies import GetBraveCoreRevision, MaybeSendEmail
 
 # Number of points to fetch and pass to FindChangePoints. A different number
 # may be used if a test has a "max_window_size" anomaly config parameter.
@@ -50,68 +51,6 @@ def ProcessTestsAsync(test_keys):
   # in parallel.
   yield [_ProcessTest(k) for k in test_keys]
 
-
-import datetime
-_CHECK_INTERVAL = datetime.timedelta(minutes=1)
-_BRAVE_SHERRIF = 'Top metrics'
-
-def _GetBraveCoreRevision(row_tuples, revision_number):
-  for _, row, _ in row_tuples:
-    if row.revision == revision_number:
-      if hasattr(row, 'a_brave_tag') and row.a_brave_tag:
-        return row.a_brave_tag
-  return None
-
-def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
-  """Fetches recent untriaged anomalies asynchronously from all sheriffs."""
-  # Previous code process anomalies by sheriff with LIMIT. It prevents some
-  # extreme cases that anomalies produced by a single sheriff prevent other
-  # sheriff's anomalies being processed. But it introduced some unnecessary
-  # complex to system and considered almost impossible happened.
-  logging.info('Fetching untriaged anomalies fired after %s',
-               min_timestamp_to_check)
-  _, _ , count = anomaly.Anomaly.QueryAsync(
-      keys_only=True,
-      limit=1000,
-      recovered=False,
-      subscriptions=[_BRAVE_SHERRIF],
-      is_improvement=False,
-      bug_id='', # untriaged
-      min_timestamp=min_timestamp_to_check)
-  logging.info('untriaged count %s', count)
-  return count
-
-@ndb.tasklet
-def _MaybeSendEmail():
-  LAST_CHECK_KEY = 'brave_last_anomaly_check_timestamp'
-  BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
-  from dashboard.common import stored_object
-  now = datetime.datetime.now()
-  last_checked = stored_object.Get(LAST_CHECK_KEY) or None
-  if last_checked is not None and now - last_checked < _CHECK_INTERVAL:
-    return
-  stored_object.Set(LAST_CHECK_KEY, now)
-
-  count = _GetUntriagedAnomaliesCount(last_checked)
-  if count == 0:
-    return
-
-  from google.appengine.api import mail
-  from six.moves.urllib.parse import urlencode
-  emails = stored_object.Get(BRAVE_EMAILS_TO_NOTIFY_KEY)
-  if emails is None:
-    logging.error('No emails to notify')
-    return
-
-  query = urlencode({'sheriff': _BRAVE_SHERRIF})
-  body = f'Visit https://brave-perf-dashboard.appspot.com/alerts?{query} for details'
-
-  mail.send_mail(
-      sender='perf-alerts@brave.com',
-      to=emails,
-      subject=f'New perf {count} alert(s) detected',
-      body=body)
-  logging.info('Sent a mail to %s', emails)
 
 @ndb.tasklet
 def _ProcessTest(test_key):
@@ -143,7 +82,7 @@ def _ProcessTest(test_key):
       logging.info('Processing test: %s', test_key.id())
       yield _ProcessTestStat(test, s, rows, ref_rows_by_stat.get(s))
 
-  yield _MaybeSendEmail()
+  yield MaybeSendEmail()
 
 def _EmailSheriff(sheriff, test_key, anomaly_key):
   test_entity = test_key.get()
@@ -481,8 +420,8 @@ def _MakeAnomalyEntity(change_point, test, stat, rows, config, matching_sub):
   bot_id_before = _GetBotIdForRevisionNumber(rows, change_point.extended_start)
   bot_id_after = _GetBotIdForRevisionNumber(rows, change_point.extended_end)
 
-  display_start = _GetBraveCoreRevision(rows, change_point.extended_start)
-  display_end = _GetBraveCoreRevision(rows, change_point.extended_end)
+  display_start = GetBraveCoreRevision(rows, change_point.extended_start)
+  display_end = GetBraveCoreRevision(rows, change_point.extended_end)
 
   suite_key = test.key.id().split('/')[:3]
   suite_key = '/'.join(suite_key)

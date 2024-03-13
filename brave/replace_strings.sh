@@ -2,7 +2,7 @@
 export LC_CTYPE=C
 export LANG=C
 files=$(find ./dashboard | egrep  "\.py|\.htm(l)?|\.js|\.css|\.yaml|\.yml|Dockerfile")
-files=$(echo "$files" | egrep -v '(_|-|/)test(s)?\.py$|(_|-|/)test(s)?\.html$|/test(s)?(data)?/')
+files=$(echo "$files" | egrep -v 'brave|(_|-|/)test(s)?\.py$|(_|-|/)test(s)?\.html$|/test(s)?(data)?/')
 
 REPLACES=(
 # Core changes
