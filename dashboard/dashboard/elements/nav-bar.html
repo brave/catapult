@@ -121,54 +121,17 @@ found in the LICENSE file.
       <ul class="menu">
         <li id="demo">Demo!</li>
         <li><a href="/">Home</a></li>
-        <!-- <li><a href="/alerts">Alerts</a></li> -->
-        <li>Main metrics<iron-icon icon="arrow-drop-down"></iron-icon>
-          <ul class="submenu">
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=3b9d792b401d608cdf4e75ec365c3b16ed4720df9b5564163da557987b7cc9b6">Speedometer2</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=0bd3c79f1574cc6d7f4bec6625b2634ff29bbd09ca8e501a0bda5b634dc49156">CPU:total
-                usage</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=b4ebd87ec0440b06c461a35866124ad8b40267521af316491a0dc26f5d3e5640">Memory:total
-                footprint</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=a861b9d43404cebc3e6aa4aa52457ca754358b2c99a4f15466caaecf3a0e53f2">Loading:FirstMeaningfulPaint</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=1e10c78322b42216bb54e1988d29413d50345ed19e26f10eb07c86fca507c94f">Loading:OnLoad</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=48de864103903f0c25e1491d7952146db29dbad2cb12f98e366f0987a2642c9f">Components
-                live performance</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=f5cbb994d71d4d65470190672dffd1e3c6fb843bc6038a66f0994bda8e9fd98a">APK
-                Size</a>
-            </li>
-          </ul>
-        </li>
-        <li>Debug metrics<iron-icon icon="arrow-drop-down"></iron-icon>
-          <ul class="submenu">
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=782c888690868d8ca1e5276ac462742bac1a49e70338de54efa7e79b788005a6">Memory:browser
-                process footprint</a></li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=c371bb7c20989dffb52f8ceee671fc3fbf23f6a68e4460278bfbb5313c103665">Memory:chrome_allocated_object_size</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=b7b3802a11890168c9d70aa9a21d9082e82727b6c761988fa4935f65683bbf67">Process
-                count</a></li>
-            <li><a href="https://brave-perf-dashboard.appspot.com/report?sid=df6015b71c0841bea1280d773c1a1861d65d6b2bba3d00e467712788f8d5ee84">Navigation:StartToCommit</a>
-            </li>
-            <li><a
-                href="https://brave-perf-dashboard.appspot.com/report?sid=f2abf879c80376e18b4d8426f3d44ed1655c5ca745f2a987dc144282dfa75a88">Startup</a>
-            </li>
-          </ul>
-        </li>
+        <li><a href="/alerts?sheriff=Top Metrics">Alerts</a></li>
+        <template is="dom-repeat" items="{{braveLinks}}">
+          <li>{{item.topName}}<iron-icon icon="arrow-drop-down"></iron-icon>
+            <ul class="submenu">
+              <template is="dom-repeat" items="{{item.entries}}">
+                <li><a href="{{item.link}}">{{item.name}}</a></li>
+              </template>
+            </ul>
+          </li>
+        </template>
+
         <li><a href="/report">Browse Graphs</a></li>
         <li><a href="https://github.com/brave/brave-browser/issues?q=is%3Aissue+is%3Aopen+label%3Aperf-regression">Perf Issues</a></li>
 <!--
@@ -227,6 +190,7 @@ Polymer({
         {'path': location.pathname + location.search},
         function(response) {
           this.loginUrl = response.login_url;
+          this.braveLinks = response.brave_links;
           this.displayUsername = response.display_username;
           this.isAdmin = response.is_admin;
           if (window.METRICS) {
