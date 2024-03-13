@@ -11,6 +11,8 @@ from __future__ import print_function
 
 import re
 
+BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
+
 from dashboard.models import subscription
 
 _TOP_METRICS_PATTERN = re.compile('|'.join([
@@ -62,7 +64,7 @@ def _GetAnomalyConfigs():
   return [config]
 
 def _GetTopMetricsSubscription():
-  return subscription.Subscription(name='Top Metrics',
+  return subscription.Subscription(name=BRAVE_TOP_METRICS_SHERRIF,
                                    monorail_project_id='brave-browser',
                                    anomaly_configs = _GetAnomalyConfigs(),
                                    visibility = subscription.VISIBILITY.PUBLIC,

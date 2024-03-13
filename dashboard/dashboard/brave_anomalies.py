@@ -21,10 +21,10 @@ from six.moves.urllib.parse import urlencode
 
 from dashboard.models import anomaly
 from dashboard.common import stored_object
+import dashboard.brave_sheriff_config_client as brave_sheriff
 
 
 _CHECK_INTERVAL = datetime.timedelta(days=1)
-_BRAVE_SHERRIF = 'Top metrics'
 
 def GetBraveCoreRevision(row_tuples, revision_number):
   for _, row, _ in row_tuples:
@@ -45,7 +45,7 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
       keys_only=True,
       limit=1000,
       recovered=False,
-      subscriptions=[_BRAVE_SHERRIF],
+      subscriptions=[brave_sheriff.BRAVE_TOP_METRICS_SHERRIF],
       is_improvement=False,
       bug_id='', # untriaged
       min_timestamp=min_timestamp_to_check).get_result()
@@ -73,7 +73,7 @@ def MaybeSendEmail():
     logging.error('No emails to notify')
     return
 
-  query = urlencode({'sheriff': _BRAVE_SHERRIF})
+  query = urlencode({'sheriff': brave_sheriff.BRAVE_TOP_METRICS_SHERRIF})
   body = f'Visit https://brave-perf-dashboard.appspot.com/alerts?{query} for details'
 
   mail.send_mail(
