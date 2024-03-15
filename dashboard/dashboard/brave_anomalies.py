@@ -45,7 +45,7 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
   # complex to system and considered almost impossible happened.
   logging.info('Fetching untriaged anomalies fired after %s',
                min_timestamp_to_check)
-  _, _ , count = anomaly.Anomaly.QueryAsync(
+  keys, _ , _ = anomaly.Anomaly.QueryAsync(
       keys_only=True,
       limit=1000,
       recovered=False,
@@ -53,8 +53,8 @@ def _GetUntriagedAnomaliesCount(min_timestamp_to_check):
       is_improvement=False,
       bug_id='', # untriaged
       min_timestamp=min_timestamp_to_check).get_result()
-  logging.info('Got count %s', count)
-  return count
+  logging.info('Got keys %s', keys)
+  return len(keys)
 
 def _SendEmail(subject):
   emails = stored_object.Get(_BRAVE_EMAILS_TO_NOTIFY_KEY)
@@ -77,16 +77,18 @@ def MaybeSendEmail():
 
   new_count = _GetUntriagedAnomaliesCount(now - _NEW_CHECK_INTERVAL)
   if new_count > 0:
-    _SendEmail(f'New perf {new_count} alert(s) detected')
+    _SendEmail(f'New {new_count} perf alert(s) detected')
     stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)
     return
 
-  last_total_checked = stored_object.Get(_LAST_TOTAL_CHECK_KEY) or None
+  last_total_checked = stored_object.Get(_LAST_TOTAL_CHECK_KEY)
   if last_total_checked is not None:
     delta = now - last_total_checked
-    logging.info('Total check delta %s', delta)
-    if delta > _TOTAL_CHECK_INTERVAL:
-      stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)
-      total = _GetUntriagedAnomaliesCount(None)
-      if total > 0:
-        _SendEmail(f'Perf {total} alert(s) need to be processed')
+  else:
+    delta = _TOTAL_CHECK_INTERVAL
+  logging.info('Total check delta %s', delta)
+  if delta >= _TOTAL_CHECK_INTERVAL:
+    stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)
+    total = _GetUntriagedAnomaliesCount(None)
+    if total > 0:
+      _SendEmail(f'Perf {total} alert(s) need to be processed')
