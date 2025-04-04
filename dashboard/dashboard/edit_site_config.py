@@ -124,6 +124,7 @@ def EditSiteConfigHandlerPost():
 def _SendNotificationEmail(key, old_value, old_external_value,
                            old_internal_value, new_value, new_external_value,
                            new_internal_value):
+  return # Brave
   user_email = users.get_current_user().email()
   subject = 'Config "%s" changed by %s' % (key, user_email)
   email_body = _NOTIFICATION_EMAIL_BODY % {

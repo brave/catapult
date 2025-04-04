@@ -57,6 +57,8 @@ from dashboard.api import test_suites
 from dashboard.api import timeseries2
 from dashboard.common import datastore_hooks
 
+from dashboard import brave_anomalies
+
 google.cloud.logging.Client().setup_logging(log_level=logging.DEBUG)
 logging.getLogger("urllib3").setLevel(logging.INFO)
 
@@ -290,6 +292,12 @@ def UpdateDashboardStatsGet():
 @flask_app.route('/update_test_suites', methods=['GET','POST'])
 def UpdateTestSuitesPost():
   return update_test_suites.UpdateTestSuitesPost()
+
+
+@flask_app.route('/brave_send_emails', methods=['GET','POST'])
+def MaybeSendEmail():
+  brave_anomalies.MaybeSendEmail()
+  return make_response('OK')
 
 
 @flask_app.route('/update_test_suite_descriptors', methods=['GET', 'POST'])

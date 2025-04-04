@@ -24,6 +24,7 @@ _ALERT_GROUP_PREFIX = 'alert_groups/'
 
 
 def GetIssues(**kwargs):
+  return [] # Brave: disable issue integration
   url = _SERVICE_URL + _ISSUES_PERFIX
   try:
     cloud_metric.PublishPerfIssueServiceRequests('GetIssues', 'GET', url,
@@ -39,6 +40,7 @@ def GetIssues(**kwargs):
 
 
 def GetIssue(issue_id, project_name='chromium'):
+  return None # Brave: disable issue integration
   # Normalize the project_name in case it is empty or None.
   project_name = 'chromium' if project_name is None or not project_name.strip(
   ) else project_name
@@ -65,6 +67,7 @@ def GetIssue(issue_id, project_name='chromium'):
 
 
 def GetIssueComments(issue_id, project_name='chromium'):
+  return [] # Brave: disable issue integration
   # Normalize the project_name in case it is empty or None.
   project_name = 'chromium' if project_name is None or not project_name.strip(
   ) else project_name
@@ -92,6 +95,7 @@ def GetIssueComments(issue_id, project_name='chromium'):
 
 
 def PostIssue(**kwargs):
+  return [] # Brave: disable issue integration
   url = _SERVICE_URL + _ISSUES_PERFIX
   try:
     cloud_metric.PublishPerfIssueServiceRequests('PostIssue', 'POST', url,
@@ -107,6 +111,7 @@ def PostIssue(**kwargs):
 
 
 def PostIssueComment(issue_id, project_name='chromium', **kwargs):
+  return [] # Brave: disable issue integration
   # Normalize the project_name in case it is empty or None.
   project_name = 'chromium' if project_name is None or not project_name.strip(
   ) else project_name
@@ -128,6 +133,7 @@ def PostIssueComment(issue_id, project_name='chromium', **kwargs):
 
 
 def GetDuplicateGroupKeys(group_key):
+  return [] # Brave: disable issue integration
   url = _SERVICE_URL + _ALERT_GROUP_PREFIX
   url += '%s/duplicates' % group_key
   try:
@@ -145,6 +151,7 @@ def GetDuplicateGroupKeys(group_key):
 
 
 def GetCanonicalGroupByIssue(current_group_key, issue_id, project_name):
+  return [] # Brave: disable issue integration
   url = _SERVICE_URL + _ALERT_GROUP_PREFIX
   url += '%s/canonical/issue_id/%s/project_name/%s' % (current_group_key,
                                                        issue_id, project_name)
@@ -171,6 +178,7 @@ def GetCanonicalGroupByIssue(current_group_key, issue_id, project_name):
 
 
 def GetAnomaliesByAlertGroupID(group_id):
+  return [] # Brave: disable issue integration
   url = _SERVICE_URL + _ALERT_GROUP_PREFIX
   url += '%s/anomalies' % group_id
   try:
@@ -189,6 +197,7 @@ def GetAnomaliesByAlertGroupID(group_id):
 
 
 def GetAlertGroupsForAnomaly(anomaly):
+  return [] # Brave: disable issue integration
   test_key = utils.TestPath(anomaly.test)
   start_rev = anomaly.start_revision
   end_rev = anomaly.end_revision
@@ -215,6 +224,7 @@ def GetAlertGroupsForAnomaly(anomaly):
 
 
 def GetAllActiveAlertGroups(group_type: int):
+  return [] # Brave: disable issue integration
   url = _SERVICE_URL + _ALERT_GROUP_PREFIX
   url += 'all'
 
@@ -231,6 +241,7 @@ def GetAllActiveAlertGroups(group_type: int):
 
 
 def PostUngroupedAlerts(group_type: int):
+  return {} # Brave: disable issue integration
   url = _SERVICE_URL + _ALERT_GROUP_PREFIX
   url += 'ungrouped'
 
@@ -248,6 +259,7 @@ def PostUngroupedAlerts(group_type: int):
 
 
 def GetAlertGroupQuality(job_id, commit):
+  return {} # Brave: disable issue integration
   commit_dict = commit.AsDict()
   logging.debug(
       '[GroupingQuality] Getting grouping quality for %s on commit %s.', job_id,

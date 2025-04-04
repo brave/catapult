@@ -2,7 +2,7 @@
 export LC_CTYPE=C
 export LANG=C
 files=$(find ./dashboard | egrep  "\.py|\.htm(l)?|\.js|\.css|\.yaml|\.yml|Dockerfile")
-files=$(echo "$files" | egrep -v '(_|-|/)test(s)?\.py$|(_|-|/)test(s)?\.html$|/test(s)?(data)?/')
+files=$(echo "$files" | egrep -v 'brave|(_|-|/)test(s)?\.py$|(_|-|/)test(s)?\.html$|/test(s)?(data)?/')
 
 REPLACES=(
 # Core changes
@@ -14,6 +14,7 @@ REPLACES=(
   "s/Chrome Performance/Brave Performance/g"
   "s/signed-in google.com accounts/signed-in brave.com accounts/g"
   "s/chromium.org account or a google.com/brave.com/g"
+  "s/crbug.com\/{{projectId}}\/{{bugId}}/github.com\/brave\/brave-browser\/issues\/{{bugId}}/g"
 
 # Replace emails just in case
   "s/@google.com/@brave.com/g"

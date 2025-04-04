@@ -824,6 +824,7 @@ def _CheckSupplementalColumn(name, value):
   # a version number, or a git commit hash.
   if name.startswith('r_'):
     revision_patterns = [
+        r'^v\d+\.\d+\.\d+$', # Brave tag
         r'^\d+$',
         r'^\d+\.\d+\.\d+\.\d+$',
         r'^[A-Fa-f0-9]{40}$',

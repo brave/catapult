@@ -259,7 +259,7 @@ Polymer({
       {name: 'keys', value: this.alertKeys.join(',')},
       {name: 'summary', value: bugTitle}
     ];
-    this.bugWindow = this.openAndPost('/file_bug', data, 'edit_bugs');
+    window.open(`https://github.com/brave/brave-browser/issues/new?assignees=&labels=perf%2Cperf-regression%2COS%2FDesktop%2C+OS%2FAndroid&projects=Perf&template=all.md&title=${encodeURI('[Perf] ' + bugTitle)}&body=${encodeURI(this.alertKeys.join(','))}`, '_blank').focus();
   },
 
   /**
