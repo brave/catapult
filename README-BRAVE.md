@@ -13,3 +13,17 @@ Deploy
 ========
 
 [Github action to deploy](https://github.com/brave/catapult/actions/workflows/deploy-to-appengine.yml)
+
+What was changed
+========
+
+[Diff with upstream](https://github.com/brave/catapult/compare/upstream...brave:catapult:main)
+
+
+Update
+========
+
+1. Update `upstream` branch to the recent catapult commit.
+2. Make a new branch `update-something` from `main`, merge `upstream` to it, resolve the conflicts.
+3. Deploy and verify your changes.
+4. Make a PR from your branch to `main`.
