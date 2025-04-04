@@ -161,6 +161,7 @@ def _ProcessTestStat(test, stat, rows, ref_rows):
     a.internal_only = (
         any(s.visibility != subscription.VISIBILITY.PUBLIC
             for s in subscriptions) or test.internal_only)
+    continue # Brave doesn't use perf_issue_service_client
     alert_groups = alert_group.AlertGroup.GetGroupsForAnomaly(a, subscriptions)
     try:
       # parity results from perf_issue_service
