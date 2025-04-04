@@ -4,7 +4,6 @@ ARG PROTOBUF_VERSION=3.6.1.3-2
 
 ENV PATH=/usr/local/depot_tools:${PATH}
 
-
 # The latest version is in sid repo. So need to specify the
 # version of dependency to avoid version conflix if you want
 # to use "stable" one.

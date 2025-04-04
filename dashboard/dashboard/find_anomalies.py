@@ -45,7 +45,6 @@ def ProcessTests(test_keys):
   yield ProcessTestsAsync(test_keys)
 
 
-
 @ndb.tasklet
 def ProcessTestsAsync(test_keys):
   # Using a parallel yield here let's the tasklets for each _ProcessTest run
@@ -94,7 +93,6 @@ def _EmailSheriff(sheriff, test_key, anomaly_key):
 @ndb.tasklet
 def _ProcessTestStat(test, stat, rows, ref_rows):
   # If there were no rows fetched, then there's nothing to analyze.
-
   if not rows:
     logging.error('No rows fetched for %s', test.test_path)
     raise ndb.Return(None)
@@ -391,6 +389,7 @@ def _GetBotIdForRevisionNumber(row_tuples, revision_number):
       if hasattr(row, 'swarming_bot_id') and row.swarming_bot_id:
         return row.swarming_bot_id
   return None
+
 
 @ndb.tasklet
 def _MakeAnomalyEntity(change_point, test, stat, rows, config, matching_sub):

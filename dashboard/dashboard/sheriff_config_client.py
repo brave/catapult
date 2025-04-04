@@ -11,8 +11,10 @@ import logging
 
 from google.auth import app_engine
 
+
 class InternalServerError(Exception):
   """An error indicating that something unexpected happens."""
+
 
 def GetSheriffConfigClient():
   """Get a cached SheriffConfigClient instance.
