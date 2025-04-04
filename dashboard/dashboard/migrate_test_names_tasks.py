@@ -526,7 +526,7 @@ def _SendNotificationEmail(job_id):
   Args:
     job_id: id of the migration job
   """
-  return # Notifications disabled in Brave
+  return # Email notifications are disabled in Brave
   root_job = tracking.GetRootJobEntry(job_id)
   job_entry = root_job.GetEntryData(tracking.RootJobData)
 

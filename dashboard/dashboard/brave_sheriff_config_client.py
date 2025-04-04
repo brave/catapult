@@ -70,6 +70,7 @@ _IGNORE_PATTERN = re.compile('|'.join([
 def _GetAnomalyConfigs():
   config = subscription.AnomalyConfig()
   config.min_segment_size = 2
+  config.min_relative_change = 0.05
   return [config]
 
 def _GetTopMetricsSubscription():

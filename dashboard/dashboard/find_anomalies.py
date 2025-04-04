@@ -84,6 +84,7 @@ def _ProcessTest(test_key):
 
 
 def _EmailSheriff(sheriff, test_key, anomaly_key):
+  return # Email notifications are disabled in Brave
   test_entity = test_key.get()
   anomaly_entity = anomaly_key.get()
 
