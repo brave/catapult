@@ -15,10 +15,22 @@ BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
 
 from dashboard.models import subscription
 
+# Metrics that are stable and tolerate to small min_relative_change.
+_TOP_STABLE_METRICS_PATTERN = re.compile('|'.join([
+    # Memory:
+    'reported_by_chrome:allocated_objects_size/',
+
+    # apk_size:
+    'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
+
+    # Process number
+    'ChildProcess.Launched.UtilityProcessHash#count',
+    'all_processes:process_count',
+]))
+
 _TOP_METRICS_PATTERN = re.compile('|'.join([
     # Memory:
     'reported_by_os:private_footprint_size/',
-    'reported_by_chrome:allocated_objects_size/',
 
     # CPU:
     'cpuTime:',
@@ -34,9 +46,6 @@ _TOP_METRICS_PATTERN = re.compile('|'.join([
 
     'rectsBasedSpeedIndex',
 
-    # apk_size:
-    'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
-
     # Startup
     'Startup.FirstWebContents.MainNavigationStart',
     'startup/navigationStart',
@@ -47,10 +56,6 @@ _TOP_METRICS_PATTERN = re.compile('|'.join([
     'timeToInteractive/',
     'timeToFirstMeaningfulPaint/',
     'cpuTimeToFirstMeaningfulPaint/',
-
-    # Process number
-    'ChildProcess.Launched.UtilityProcessHash#count',
-    'all_processes:process_count',
 ]))
 
 _IGNORE_PATTERN = re.compile('|'.join([
@@ -67,27 +72,28 @@ _IGNORE_PATTERN = re.compile('|'.join([
   r'^([^/]+/){2}loading.[^/]+(/[^/]+){1,2}$',
 ]))
 
-def _GetAnomalyConfigs():
+def _GetAnomalyConfigs(min_relative_change: float):
   config = subscription.AnomalyConfig()
   config.min_segment_size = 2
-  config.min_relative_change = 0.05
+  config.min_relative_change = min_relative_change
   return [config]
 
-def _GetTopMetricsSubscription():
-  return subscription.Subscription(name=BRAVE_TOP_METRICS_SHERRIF,
+def _GetSubscription(name: str, min_relative_change: float):
+  return subscription.Subscription(name=name,
                                    monorail_project_id='brave-browser',
-                                   anomaly_configs = _GetAnomalyConfigs(),
+                                   anomaly_configs = _GetAnomalyConfigs(min_relative_change),
                                    visibility = subscription.VISIBILITY.PUBLIC,
                                    auto_triage_enable=True,
                                    auto_bisect_enable=False)
 
+def _GetTopStableMetricsSubscription():
+  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, 0.03)
+
+def _GetTopMetricsSubscription():
+  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, 0.05)
+
 def _GetOtherMetricsSubscription():
-  return subscription.Subscription(name='Brave Sheriff',
-                                   monorail_project_id='brave-browser',
-                                   anomaly_configs = _GetAnomalyConfigs(),
-                                   visibility = subscription.VISIBILITY.PUBLIC,
-                                   auto_triage_enable=True,
-                                   auto_bisect_enable=False)
+  return _GetSubscription('Brave Sheriff', 0.05)
 
 
 class InternalServerError(Exception):
@@ -98,7 +104,9 @@ class BraveSheriffConfigClient(object):
     if _IGNORE_PATTERN.search(path) is not None:
       return [], None
 
-    if _TOP_METRICS_PATTERN.search(path) is not None:
+    if _TOP_STABLE_METRICS_PATTERN.search(path) is not None:
+      return [_GetTopStableMetricsSubscription()], None
+    elif _TOP_METRICS_PATTERN.search(path) is not None:
       return [_GetTopMetricsSubscription()], None
     else:
       return [_GetOtherMetricsSubscription()], None
