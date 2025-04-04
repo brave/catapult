@@ -198,7 +198,7 @@ Polymer({
           }
         }.bind(this));
 
-    if (!window.location.hostname.endsWith('.appspot.com')) {
+  if (window.location.hostname !== 'chromeperf.appspot.com') {
       this.$.demo.style.display = 'list-item';
       this.$.demo.style.color = 'black';
       window.document.body.style.border = '3px solid #0f0';

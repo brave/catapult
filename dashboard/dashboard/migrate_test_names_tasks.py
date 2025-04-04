@@ -410,7 +410,7 @@ def _MigrateTestCopyData(job_id, old_test_key, new_test_key, parent_id):
   is_fully_complete = tracking.CompleteTestJobData(
       job_id, utils.TestPath(new_test_key), parent_id)
   if is_fully_complete:
-    #_SendNotificationEmail(job_id) #Notifications disabled in brave
+    _SendNotificationEmail(job_id)
     tracking.CompleteJob(job_id)
   old_test_key.delete()
 
@@ -526,6 +526,7 @@ def _SendNotificationEmail(job_id):
   Args:
     job_id: id of the migration job
   """
+  return # Notifications disabled in Brave
   root_job = tracking.GetRootJobEntry(job_id)
   job_entry = root_job.GetEntryData(tracking.RootJobData)
 
