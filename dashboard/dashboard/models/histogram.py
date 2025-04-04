@@ -400,7 +400,7 @@ def _FindOrInsertNamedDiagnosticsOutOfOrder(new_diagnostic, old_diagnostics,
         futures.append(prev_diagnostic.put_async())
         if new_diagnostic:
           new_diagnostic = None
-          futures.append(cur.put_async)
+          futures.append(cur.put_async()) # Brave: fixed an upstream issue
         else:
           futures.append(cur.key.delete_async())
 
