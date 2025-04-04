@@ -7,7 +7,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
-import mock
+from unittest import mock
 import datetime
 from flask import Flask
 import logging
@@ -201,6 +201,11 @@ class GroupReportTestBase(testing_common.TestCase):
         self._PostUngroupedAlertsMock)
 
   def _AddAnomaly(self, **kargs):
+    t = graph_data.TestMetadata(
+        id='master/bot/test_suite/measurement/test_case',)
+    t.improvement_direction = anomaly.UP
+    t.put()
+
     default = {
         'test': 'master/bot/test_suite/measurement/test_case',
         'start_revision': 1,

@@ -11,11 +11,10 @@ import sys
 import tempfile
 import six
 
-import dependency_manager  # pylint: disable=import-error
-
 from py_utils import file_util
 from telemetry.core import exceptions
 from telemetry.core import platform as platform_module
+from telemetry.core import util
 from telemetry.internal.backends.chrome import chrome_startup_args
 from telemetry.internal.backends.chrome import desktop_browser_backend
 from telemetry.internal.browser import browser
@@ -32,7 +31,7 @@ _BROWSER_STARTUP_TRIES = 3
 class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
   """A desktop browser that can be controlled."""
 
-  def __init__(self, browser_type, finder_options, executable, flash_path,
+  def __init__(self, browser_type, finder_options, executable,
                is_content_shell, browser_directory, is_local_build=False):
     """
     Args:
@@ -41,8 +40,6 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
       finder_options: A browser_options.BrowserFinderOptions instance containing
           parsed arguments.
       executable: A string containing a path to the browser executable to use.
-      flash_path: A string containing a path to the version of Flash to use. Can
-          be None if Flash is not going to be used.
       is_content_shell: A boolean denoting if this browser is a content shell
           instead of a full browser.
       browser_directory: A string containing a path to the directory where
@@ -55,11 +52,11 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
     target_os = sys.platform.lower()
     super().__init__(
         browser_type, target_os, not is_content_shell)
-    assert browser_type in FindAllBrowserTypes(), (
-        'Please add %s to desktop_browser_finder.FindAllBrowserTypes' %
-        browser_type)
+    if not util.IsBuilderOutName(browser_type):
+      assert browser_type in FindAllBrowserTypes(), (
+          'Please add %s to desktop_browser_finder.FindAllBrowserTypes' %
+          browser_type)
     self._local_executable = executable
-    self._flash_path = flash_path
     self._is_content_shell = is_content_shell
     self._browser_directory = browser_directory
     self._profile_directory = None
@@ -74,12 +71,16 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
     self._build_dir = self._browser_directory
 
   def __repr__(self):
-    return 'PossibleDesktopBrowser(type=%s, executable=%s, flash=%s)' % (
-        self.browser_type, self._local_executable, self._flash_path)
+    return 'PossibleDesktopBrowser(type=%s, executable=%s, binary_path=%s)' % (
+        self.browser_type, self._local_executable, self._browser_directory)
 
   @property
   def browser_directory(self):
     return self._browser_directory
+
+  @property
+  def local_executable(self):
+    return self._local_executable
 
   @property
   def profile_directory(self):
@@ -167,13 +168,6 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
           self._build_dir, self._local_executable,
           self.platform.GetOSName(), self.platform.GetArchName())
 
-    if self._flash_path and not os.path.exists(self._flash_path):
-      logging.warning(
-          'Could not find Flash at %s. Continuing without Flash.\n'
-          'To run with Flash, check it out via http://go/read-src-internal',
-          self._flash_path)
-      self._flash_path = None
-
     self._InitPlatformIfNeeded()
 
     for x in range(0, _BROWSER_STARTUP_TRIES):
@@ -186,7 +180,7 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
         browser_backend = desktop_browser_backend.DesktopBrowserBackend(
             self._platform_backend, self._browser_options,
             self._browser_directory, self._profile_directory,
-            self._local_executable, self._flash_path, self._is_content_shell,
+            self._local_executable, self._is_content_shell,
             build_dir=self._build_dir)
         new_browser = browser.Browser(
             browser_backend, self._platform_backend, startup_args)
@@ -230,22 +224,20 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
                       if arg.startswith('--window-size=')]
       if len(window_sizes) == 0:
         startup_args.append('--window-size=1280,1024')
-      if self._flash_path:
-        startup_args.append('--ppapi-flash-path=%s' % self._flash_path)
-        # Also specify the version of Flash as a large version, so that it is
-        # not overridden by the bundled or component-updated version of Flash.
-        startup_args.append('--ppapi-flash-version=99.9.999.999')
 
     if self.profile_directory is not None:
-      if self._is_content_shell:
-        startup_args.append('--data-path=%s' % self.profile_directory)
-      else:
-        startup_args.append('--user-data-dir=%s' % self.profile_directory)
+      startup_args.append('--user-data-dir=%s' % self.profile_directory)
 
     trace_config_file = (self._platform_backend.tracing_controller_backend
                          .GetChromeTraceConfigFile())
     if trace_config_file:
       startup_args.append('--trace-config-file=%s' % trace_config_file)
+    trace_config = (self._platform_backend.tracing_controller_backend.
+                    GetChromeTraceConfig())
+    if trace_config:
+      if (trace_config.chrome_trace_config.trace_format is None
+          or trace_config.chrome_trace_config.trace_format != 'proto'):
+        startup_args.append('--trace-startup-format=json')
 
     if sys.platform.startswith('linux'):
       # All linux tests should use the --password-store=basic
@@ -300,12 +292,19 @@ def CanFindAvailableBrowsers():
 
 def FindAllBrowserTypes():
   return [
+      'builder',
       'exact',
       'reference',
       'release',
       'release_x64',
+      'release_full_x64',
+      'release_x86',
+      'release_full_x86',
       'debug',
       'debug_x64',
+      'debug_full_x64',
+      'debug_x86',
+      'debug_full_x86',
       'default',
       'stable',
       'beta',
@@ -331,13 +330,6 @@ def FindAllAvailableBrowsers(finder_options, device):
   has_x11_display = True
   if sys.platform.startswith('linux') and os.getenv('DISPLAY') is None:
     has_x11_display = False
-
-  os_name = platform_module.GetHostPlatform().GetOSName()
-  arch_name = platform_module.GetHostPlatform().GetArchName()
-  try:
-    flash_path = binary_manager.LocalPath('flash', os_name, arch_name)
-  except dependency_manager.NoPathFoundError:
-    flash_path = None
 
   chromium_app_names = []
   if sys.platform == 'darwin':
@@ -367,32 +359,63 @@ def FindAllAvailableBrowsers(finder_options, device):
     if path_module.IsExecutable(normalized_executable):
       browser_directory = os.path.dirname(finder_options.browser_executable)
       browsers.append(PossibleDesktopBrowser(
-          'exact', finder_options, normalized_executable, flash_path,
+          'exact', finder_options, normalized_executable,
           is_content_shell,
           browser_directory))
-    else:
-      raise exceptions.PathMissingError(
-          '%s specified by --browser-executable does not exist or is not '
-          'executable' %
-          normalized_executable)
+      return browsers
+
+    raise exceptions.PathMissingError(
+        '%s specified by --browser-executable does not exist or is not '
+        'executable' % normalized_executable)
 
   def AddIfFound(browser_type, build_path, app_name, content_shell):
     app = os.path.join(build_path, app_name)
     if path_module.IsExecutable(app):
-      browsers.append(PossibleDesktopBrowser(
-          browser_type, finder_options, app, flash_path,
-          content_shell, build_path, is_local_build=True))
+      opt = PossibleDesktopBrowser(browser_type,
+                                   finder_options,
+                                   app,
+                                   content_shell,
+                                   build_path,
+                                   is_local_build=True)
+      browsers.append(opt)
+      logging.info('Potential browser option: %s' % opt)
       return True
     return False
 
   # Add local builds
-  for build_path in path_module.GetBuildDirectories(finder_options.chrome_root):
-    # TODO(agrieve): Extract browser_type from args.gn's is_debug.
-    browser_type = os.path.basename(build_path.rstrip(os.sep)).lower()
+  if finder_options.chromium_output_dir:
+    logging.info('Flag chromium_output_dir: %s' %
+                 finder_options.chromium_output_dir)
+    if finder_options.browser_type and finder_options.browser_type != 'all':
+      browser_type = finder_options.browser_type
+      logging.info('Using browser_type %s from command line', browser_type)
+    else:
+      browser_type = os.path.basename(
+          os.path.abspath(finder_options.chromium_output_dir).rstrip(os.sep)
+      ).lower()
+      logging.info(
+          'Generated browser_type %s from chromium_output_dir', browser_type)
     for chromium_app_name in chromium_app_names:
-      AddIfFound(browser_type, build_path, chromium_app_name, False)
-    AddIfFound('content-shell-' + browser_type, build_path,
-               content_shell_app_name, True)
+      AddIfFound(browser_type,
+                 finder_options.chromium_output_dir, chromium_app_name, False)
+  else:
+    logging.info('Search for possible desktop browser options from flag chrome '
+                 'root: %s' % finder_options.chrome_root)
+    # b/377748127 - GetBuildDirectories will search legacy formats, for example,
+    # out/Release or out/Debug as well as out/{hash}-{builder_name} format.
+    # As long as a Chrome binary exists at {build_path} + {app_location},
+    # it'll be included as a PossibleBrowser option.
+    for build_path in path_module.GetBuildDirectories(
+        finder_options.chrome_root):
+
+      # The browser type for out/{hash}-{builder_name} will be
+      # {hash}-{builder_name}
+      browser_type = os.path.basename(build_path.rstrip(os.sep)).lower()
+
+      for chromium_app_name in chromium_app_names:
+        AddIfFound(browser_type, build_path, chromium_app_name, False)
+      AddIfFound('content-shell-' + browser_type, build_path,
+                 content_shell_app_name, True)
 
   reference_build = None
   if finder_options.browser_type == 'reference':
@@ -411,19 +434,19 @@ def FindAllAvailableBrowsers(finder_options, device):
     mac_system = mac_system_root + '/Contents/MacOS/Google Chrome'
     if path_module.IsExecutable(mac_canary):
       browsers.append(PossibleDesktopBrowser('canary', finder_options,
-                                             mac_canary, None, False,
+                                             mac_canary, False,
                                              mac_canary_root))
 
     if path_module.IsExecutable(mac_system):
       browsers.append(PossibleDesktopBrowser('system', finder_options,
-                                             mac_system, None, False,
+                                             mac_system, False,
                                              mac_system_root))
 
     if reference_build and path_module.IsExecutable(reference_build):
       reference_root = os.path.dirname(os.path.dirname(os.path.dirname(
           reference_build)))
       browsers.append(PossibleDesktopBrowser('reference', finder_options,
-                                             reference_build, None, False,
+                                             reference_build, False,
                                              reference_root))
 
   # Linux specific options.
@@ -439,11 +462,11 @@ def FindAllAvailableBrowsers(finder_options, device):
       browser_path = os.path.join(root, 'chrome')
       if path_module.IsExecutable(browser_path):
         browsers.append(PossibleDesktopBrowser(version, finder_options,
-                                               browser_path, None, False, root))
+                                               browser_path, False, root))
     if reference_build and path_module.IsExecutable(reference_build):
       reference_root = os.path.dirname(reference_build)
       browsers.append(PossibleDesktopBrowser('reference', finder_options,
-                                             reference_build, None, False,
+                                             reference_build, False,
                                              reference_root))
 
   # Win32-specific options.
@@ -463,7 +486,7 @@ def FindAllAvailableBrowsers(finder_options, device):
         if full_path:
           browsers.append(PossibleDesktopBrowser(
               browser_name, finder_options, full_path,
-              None, False, os.path.dirname(full_path)))
+              False, os.path.dirname(full_path)))
 
   has_ozone_platform = False
   for arg in finder_options.browser_options.extra_browser_args:

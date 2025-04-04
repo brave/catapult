@@ -12,7 +12,7 @@ import fnmatch
 import itertools
 import json
 import logging
-import mock
+from unittest import mock
 import os
 import re
 import sys
@@ -439,6 +439,10 @@ class FakeIssueTrackerService:
     self._bug_id_counter += 1
     return result
 
+  def NewBugError(self, *args, **kwargs):
+    del args, kwargs
+    return {'error': 'mock error.'}
+
   def AddBugComment(self, *args, **kwargs):
     self.add_comment_args = args
     self.add_comment_kwargs = kwargs
@@ -581,8 +585,10 @@ class FakeCASClient:
   @staticmethod
   def _NormalizeDigest(digest):
     return {
-        'hash': digest['hash'],
-        'sizeBytes': digest.get('sizeBytes') or str(digest.get('size_bytes')),
+        'hash':
+            digest['hash'],
+        'sizeBytes':
+            str(digest.get('sizeBytes') or digest.get('size_bytes') or 0),
     }
 
   def GetTree(self, cas_ref, page_size=None, page_token=None):
@@ -590,7 +596,7 @@ class FakeCASClient:
       raise NotImplementedError()
     digest = self._NormalizeDigest(cas_ref['digest'])
     key = (digest['hash'], digest['sizeBytes'])
-    return [{'directories': [self._trees[cas_ref['cas_instance']][key]]}]
+    return [{'directories': [self._trees[cas_ref['casInstance']][key]]}]
 
   def BatchRead(self, cas_instance, digests):
     digests = [self._NormalizeDigest(d) for d in digests]

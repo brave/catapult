@@ -30,13 +30,13 @@ from devil import base_error
 from devil import devil_env
 from devil.utils import cmd_helper
 from devil.android import apk_helper
+from devil.android import devil_util
 from devil.android import device_signal
 from devil.android import decorators
 from devil.android import device_errors
 from devil.android import device_temp_file
 from devil.android import install_commands
 from devil.android import logcat_monitor
-from devil.android import md5sum
 from devil.android.sdk import adb_wrapper
 from devil.android.sdk import intent
 from devil.android.sdk import keyevent
@@ -59,16 +59,15 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_BOOT_TIMEOUT = 60
+_BOOT_TIMEOUT = adb_wrapper.DEFAULT_TIMEOUT * 2
 _BOOT_RETRIES = 2
-_DEFAULT_TIMEOUT = 30
+_DEFAULT_TIMEOUT = adb_wrapper.DEFAULT_TIMEOUT
 _DEFAULT_RETRIES = 3
-
 
 # TODO(agrieve): Would be better to make this timeout based off of data size.
 # Needs to be large for remote devices & speed depends on internet connection.
 # Debug Chrome builds can be 200mb+.
-_FILE_TRANSFER_TIMEOUT = 7 * 60
+_FILE_TRANSFER_TIMEOUT = adb_wrapper.DEFAULT_SUPER_LONG_TIMEOUT
 
 
 # A sentinel object for default values
@@ -143,6 +142,9 @@ _PERMISSIONS_DENYLIST_RE = re.compile('|'.join(
         'android.permission.DOWNLOAD_WITHOUT_NOTIFICATION',
         'android.permission.EXPAND_STATUS_BAR',
         'android.permission.FOREGROUND_SERVICE',
+        'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+        'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+        'android.permission.FOREGROUND_SERVICE_SPECIAL_USE',
         'android.permission.GET_PACKAGE_SIZE',
         'android.permission.INSTALL_SHORTCUT',
         'android.permission.INJECT_EVENTS',
@@ -161,11 +163,13 @@ _PERMISSIONS_DENYLIST_RE = re.compile('|'.join(
         'android.permission.REQUEST_INSTALL_PACKAGES',
         'android.permission.RESTRICTED_VR_ACCESS',
         'android.permission.RUN_INSTRUMENTATION',
+        'android.permission.RUN_USER_INITIATED_JOBS',
         'android.permission.SET_ALARM',
         'android.permission.SET_TIME_ZONE',
         'android.permission.SET_WALLPAPER',
         'android.permission.SET_WALLPAPER_HINTS',
         'android.permission.TRANSMIT_IR',
+        'android.permission.USE_BIOMETRIC',
         'android.permission.USE_CREDENTIALS',
         'android.permission.USE_FINGERPRINT',
         'android.permission.VIBRATE',
@@ -175,8 +179,11 @@ _PERMISSIONS_DENYLIST_RE = re.compile('|'.join(
         'com.android.browser.permission.WRITE_HISTORY_BOOKMARKS',
         'com.android.launcher.permission.INSTALL_SHORTCUT',
         'com.chrome.permission.DEVICE_EXTRAS',
+        'com.google.android.apps.aicore.service.BIND_SERVICE',
         'com.google.android.apps.now.CURRENT_ACCOUNT_ACCESS',
         'com.google.android.c2dm.permission.RECEIVE',
+        'com.google.android.finsky.permission.DSE',
+        'com.google.android.googlequicksearchbox.permission.LENS_SERVICE',
         'com.google.android.providers.gsf.permission.READ_GSERVICES',
         'com.google.vr.vrcore.permission.VRCORE_INTERNAL',
         'com.sec.enterprise.knox.MDM_CONTENT_PROVIDER',
@@ -307,8 +314,10 @@ _WEBVIEW_SYSUPDATE_MIN_VERSION_CODE = re.compile(
 _GOOGLE_FEATURES_RE = re.compile(r'^\s*com\.google\.')
 
 # On Android < 12, "ro.product.device" starts with "generic_"
-# On Android >= 12, "ro.product.device" starts with "emulator64_"
-_EMULATOR_RE = re.compile(r'^(generic_|emulator64_).*$')
+# On Android == 12, "ro.product.device" starts with "emulator64_"
+# On Android >= 13, "ro.product.device" starts with "emu64x"
+# On Android >= 15, "ro.product.device" starts with "vsoc"
+_EMULATOR_RE = re.compile(r'^(generic_|emulator64_|emu64x|vsoc_).*$')
 
 # Regular expressions for determining if a package is installed using the
 # output of `dumpsys package`.
@@ -854,6 +863,24 @@ class DeviceUtils(object):
     raise device_errors.CommandFailedError('Unable to fetch IMEI.')
 
   @decorators.WithTimeoutAndRetriesFromInstance()
+  def ListPackages(self, package_filter=None, timeout=None, retries=None):
+    """Lists installed packages via 'pm list packages'.
+
+    Args:
+      package_filter: An optional string containing a substring to filter to.
+
+    Returns:
+      A list of strings containing the output of 'pm list packages' filtered to
+      the |package_filter|.
+    """
+    cmd = ['pm', 'list', 'packages']
+    if self.target_user is not None:
+      cmd.extend(['--user', str(self.target_user)])
+    if package_filter:
+      cmd.append(package_filter)
+    return self.RunShellCommand(cmd, check_return=True)
+
+  @decorators.WithTimeoutAndRetriesFromInstance()
   def IsApplicationInstalled(self,
                              package,
                              library_version=None,
@@ -878,11 +905,7 @@ class DeviceUtils(object):
     if library_version is None:
       # `pm list packages` allows matching substrings, but we want exact matches
       # only.
-      cmd = ['pm', 'list', 'packages']
-      if self.target_user is not None:
-        cmd.extend(['--user', str(self.target_user)])
-      cmd.append(package)
-      matching_packages = self.RunShellCommand(cmd, check_return=True)
+      matching_packages = self.ListPackages(package)
       desired_line = 'package:' + package
       found_package = desired_line in matching_packages
       if found_package:
@@ -1267,7 +1290,7 @@ class DeviceUtils(object):
     if decrypt:
       timeout_retry.WaitFor(is_decryption_completed)
 
-  REBOOT_DEFAULT_TIMEOUT = 10 * _DEFAULT_TIMEOUT
+  REBOOT_DEFAULT_TIMEOUT = adb_wrapper.DEFAULT_LONG_TIMEOUT
 
   @decorators.WithTimeoutAndRetriesFromInstance(
       min_default_timeout=REBOOT_DEFAULT_TIMEOUT)
@@ -1800,7 +1823,7 @@ class DeviceUtils(object):
       return '%s=%s' % (key, cmd_helper.DoubleQuote(value))
 
     def run(cmd):
-      return self.adb.Shell(cmd)
+      return self.adb.Shell(cmd, timeout=timeout)
 
     def handle_check_return(cmd):
       try:
@@ -2087,8 +2110,11 @@ class DeviceUtils(object):
     package = component.split('/')[0]
     shell_snippet = 'p=%s;%s' % (package,
                                  cmd_helper.ShrinkToSnippet(cmd, 'p', package))
-    return self.RunShellCommand(
-        shell_snippet, shell=True, check_return=True, large_output=True)
+    return self.RunShellCommand(shell_snippet,
+                                shell=True,
+                                check_return=True,
+                                large_output=True,
+                                timeout=timeout)
 
   @decorators.WithTimeoutAndRetriesFromInstance()
   def BroadcastIntent(self, intent_obj, timeout=None, retries=None):
@@ -2454,7 +2480,8 @@ class DeviceUtils(object):
           self.RunShellCommand(['source', script.name],
                                check_return=True,
                                run_as=run_as,
-                               as_root=as_root)
+                               as_root=as_root,
+                               timeout=timeout)
       self._PushFilesImpl(host_device_tuples, changed_files)
     cache_commit_func()
 
@@ -2572,8 +2599,9 @@ class DeviceUtils(object):
     def calculate_host_checksums():
       # Need to compute all checksums when caching.
       if self._enable_device_files_cache:
-        return md5sum.CalculateHostMd5Sums([t[0] for t in file_tuples])
-      return md5sum.CalculateHostMd5Sums([t[0] for t in possibly_stale_tuples])
+        return devil_util.CalculateHostHashes([t[0] for t in file_tuples])
+      return devil_util.CalculateHostHashes(
+          [t[0] for t in possibly_stale_tuples])
 
     def calculate_device_checksums():
       paths = {t[1] for t in possibly_stale_tuples}
@@ -2589,7 +2617,7 @@ class DeviceUtils(object):
           else:
             paths_not_in_cache.add(path)
         paths = paths_not_in_cache
-      sums.update(dict(md5sum.CalculateDeviceMd5Sums(paths, self)))
+      sums.update(dict(devil_util.CalculateDeviceHashes(list(paths), self)))
       if self._enable_device_files_cache:
         for path, checksum in sums.items():
           self._cache['device_path_checksums'][path] = checksum
@@ -2604,9 +2632,9 @@ class DeviceUtils(object):
     up_to_date = set()
 
     for host_path, device_path in possibly_stale_tuples:
-      device_checksum = device_checksums.get(device_path, None)
-      host_checksum = host_checksums.get(host_path, None)
-      if device_checksum == host_checksum and device_checksum is not None:
+      device_checksum = device_checksums.get(device_path, '')
+      host_checksum = host_checksums.get(host_path, '')
+      if device_checksum and device_checksum == host_checksum:
         up_to_date.add(device_path)
       else:
         nodes_to_delete.add(device_path)
@@ -2632,7 +2660,7 @@ class DeviceUtils(object):
       # TODO(hypan): Double check for multi-user
       if self.PathExists('/data/data/' + package_name, as_root=True):
         device_paths = self._GetApplicationPathsInternal(package_name)
-        file_to_checksums = md5sum.CalculateDeviceMd5Sums(device_paths, self)
+        file_to_checksums = devil_util.CalculateDeviceHashes(device_paths, self)
         ret = set(file_to_checksums.values())
       else:
         logger.info('Cannot reuse package %s (data directory missing)',
@@ -2643,7 +2671,7 @@ class DeviceUtils(object):
 
   def _ComputeStaleApks(self, package_name, host_apk_paths):
     def calculate_host_checksums():
-      return md5sum.CalculateHostMd5Sums(host_apk_paths)
+      return devil_util.CalculateHostHashes(host_apk_paths)
 
     def calculate_device_checksums():
       return self._ComputeDeviceChecksumsForApks(package_name)
@@ -2651,7 +2679,8 @@ class DeviceUtils(object):
     host_checksums, device_checksums = reraiser_thread.RunAsync(
         (calculate_host_checksums, calculate_device_checksums))
     stale_apks = [
-        k for (k, v) in host_checksums.items() if v not in device_checksums
+        k for (k, v) in host_checksums.items()
+        if v and v not in device_checksums
     ]
     return stale_apks, set(host_checksums.values())
 
@@ -2778,9 +2807,14 @@ class DeviceUtils(object):
               zip_file=device_temp.name,
               dirs=' '.join(cmd_helper.SingleQuote(d) for d in dirs))
           self.WriteFile(script.name, script_contents)
-          self.RunShellCommand(['source', script.name],
-                               check_return=True,
-                               as_root=True)
+          self.RunShellCommand(
+              ['source', script.name],
+              check_return=True,
+              # Increase timeout to 100 secs as gtest can get 2k+ dirs
+              # which can take longer than the default timeout.
+              # See crbug.com/370307339 for an example.
+              timeout=100,
+              as_root=True)
 
     return True
 
@@ -2900,7 +2934,8 @@ class DeviceUtils(object):
       self.RunShellCommand(cmd, shell=True, as_root=True, check_return=True)
       yield device_temp
 
-  @decorators.WithTimeoutAndRetriesFromInstance()
+  @decorators.WithTimeoutAndRetriesFromInstance(
+      min_default_timeout=_FILE_TRANSFER_TIMEOUT)
   def PullFile(self,
                device_path,
                host_path,
@@ -3042,11 +3077,16 @@ class DeviceUtils(object):
     """
     logger.debug('The following contents will be written to the file %s: %s',
                  device_path, contents)
+    assert posixpath.isabs(device_path), 'Expected abs path: ' + device_path
     if not force_push and len(contents) < self._MAX_ADB_COMMAND_LENGTH:
       # If the contents are small, for efficieny we write the contents with
       # a shell command rather than pushing a file.
-      cmd = 'echo -n %s > %s' % (cmd_helper.SingleQuote(contents),
-                                 cmd_helper.SingleQuote(device_path))
+      parent_dir = posixpath.dirname(device_path)
+      filename = posixpath.basename(device_path)
+      cmd = 'P=%s;mkdir -p "$P" && echo -n %s>"$P"/%s' % (
+          cmd_helper.SingleQuote(parent_dir), cmd_helper.SingleQuote(contents),
+          cmd_helper.SingleQuote(filename))
+
       self.RunShellCommand(cmd,
                            shell=True,
                            as_root=as_root,
@@ -4479,6 +4519,11 @@ class DeviceUtils(object):
     if ('android.permission.WRITE_EXTERNAL_STORAGE' in permissions
         and 'android.permission.READ_EXTERNAL_STORAGE' not in permissions):
       permissions.add('android.permission.READ_EXTERNAL_STORAGE')
+
+    # This was introduced in API level 33:
+    # https://developer.android.com/develop/ui/views/notifications/notification-permission
+    if self.build_version_sdk < 33:
+      permissions.discard('android.permission.POST_NOTIFICATIONS')
 
     script_raw = [
         'p={package}',

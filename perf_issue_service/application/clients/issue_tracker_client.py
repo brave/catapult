@@ -9,6 +9,10 @@ from application.clients import monorail_client
 from application.clients import buganizer_client
 
 BUGANIZER_PROJECTS = {
+  "fuchsia": "buganizer",
+  "chromium": "buganizer",
+  "webrtc": "buganizer",
+  # Test
   "MigratedProject": "buganizer",
   "ReadOnlyProject": "none"
 }
@@ -16,24 +20,17 @@ BUGANIZER_PROJECTS = {
 class IssueTrackerClient:
   """Class for updating perf issues."""
 
-  def __init__(self, project_name='chromium'):
-    issue_tracker_service = self._GetIssueTrackerByProject(project_name)
-    if issue_tracker_service == 'monorail':
-      self._client = monorail_client.MonorailClient()
-    elif issue_tracker_service == 'buganizer':
-      self._client = buganizer_client.BuganizerClient()
-    else:
-      raise NotImplementedError(
-        'Unknow issue tracker service target: %s', issue_tracker_service)
+  def __init__(self, project_name='chromium', issue_id=None):
+    '''Choose between Monorail and Buganizer clients.
 
-
-  def _GetIssueTrackerByProject(self, project_name):
-    issue_tracker = BUGANIZER_PROJECTS.get(project_name, 'monorail')
-    logging.debug(
-      '[PerfIssueService] Project %s is using %s as issue tracker.',
-      project_name, issue_tracker)
-    return issue_tracker
-
+    1. If the issue id is a Buganizer ID, the value should be assigned after
+       migration. We will use Buganizer client regardless of the project value.
+    2. If the issue id is a Monorail ID, we need the project value to tell
+       whether the project is migrated. If it is, use Buganizer client,
+       otherwise Monorail client.
+    '''
+    self._client = buganizer_client.BuganizerClient()
+    return
 
   def GetIssuesList(self, **kwargs):
     """Makes a request to the issue tracker to list issues."""
@@ -54,4 +51,3 @@ class IssueTrackerClient:
   def NewComment(self, **kwargs):
     """Create a new comment for the targeted issue"""
     return self._client.NewComment(**kwargs)
-

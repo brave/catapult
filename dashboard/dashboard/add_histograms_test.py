@@ -10,7 +10,7 @@ import base64
 from flask import Flask
 import itertools
 import json
-import mock
+from unittest import mock
 import random
 import six
 import string
@@ -1532,10 +1532,13 @@ class AddHistogramsTest(AddHistogramsBaseTest):
         _CreateSingleHistogram('hist2', 'master2')
     ])
 
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ValueError) as error:
       add_histograms.FindSuiteLevelSparseDiagnostics(histograms,
                                                      utils.TestKey('M/B/Foo'),
                                                      12345, False)
+    self.assertIn(
+        'diagnostics must be the same for all histograms. Suite key: M/B/Foo',
+        str(error.exception))
 
   def testComputeRevision(self):
     hs = _CreateHistogram(

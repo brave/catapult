@@ -21,12 +21,18 @@ See go/resultdb and go/resultsink for more details.
 """
 
 import base64
+from collections.abc import Mapping
+import contextlib
 import hashlib
 import json
 import os
 import sys
 
-import requests
+# The requests module is only needed if we actually need to talk to a sink.
+try:
+    import requests
+except ImportError:
+    requests = None
 
 from typ import host as typ_host
 from typ import json_results
@@ -72,6 +78,7 @@ class ResultSinkReporter(object):
         self._session = None
         self._chromium_src_dir = None
         self._output_file = output_file
+        self._pending_results = None
         if disable:
             return
 
@@ -84,6 +91,10 @@ class ResultSinkReporter(object):
                             'result_sink')
             if not self._sink:
                 return
+
+            assert requests is not None, (
+                'Need the requests module to talk to the result sink'
+            )
 
             self._invocation_level_url = ('http://%s/prpc/luci.resultsink.v1.Sink/ReportInvocationLevelArtifacts'
                          % self._sink['address'])
@@ -124,7 +135,8 @@ class ResultSinkReporter(object):
 
     def report_individual_test_result(
             self, result, artifact_output_dir, expectations, test_file_location,
-            test_file_line=None, test_name_prefix='', additional_tags=None):
+            test_file_line=None, test_name_prefix='', additional_tags=None,
+            html_summary=None):
         """Reports a single test result to ResultSink.
 
         Inputs are typically similar to what is passed to
@@ -146,8 +158,13 @@ class ResultSinkReporter(object):
                     containing the test.
             test_name_prefix: A string containing the prefix that will be added
                     to the test name.
-            additional_tags: An optional dict of additional tags to report to
-                    ResultDB.
+            additional_tags: Optional tags to add to the ResultDB result. The
+                    tags should be represented either as a sequence of key-value
+                    pairs or as a mapping from keys to values. The former
+                    supports repeated keys.
+            html_summary: Optional human-readable explanation of the result as
+                    sanitized HTML. If omitted, the reporter will generate a
+                    default summary with links extracted from artifacts.
 
         Returns:
             0 if the result was reported successfully or ResultDB is not
@@ -157,7 +174,9 @@ class ResultSinkReporter(object):
             return 0
 
         expectation_tags = expectations.tags if expectations else []
-        additional_tags = additional_tags or {}
+        additional_tags = additional_tags or []
+        if isinstance(additional_tags, Mapping):
+            additional_tags = list(additional_tags.items())
 
         test_id = test_name_prefix + result.name
         raw_typ_expected_results = (
@@ -188,16 +207,24 @@ class ResultSinkReporter(object):
         if expectation_tags:
             for tag in expectation_tags:
                 tag_list.append(('typ_tag', tag))
-        for key, value in additional_tags.items():
+        for key, value in additional_tags:
             assert isinstance(key, str)
             assert isinstance(value, str)
             tag_list.append((key, value))
 
         artifacts = {}
         original_artifacts = result.artifacts or {}
+        in_memory_text_artifacts = result.in_memory_text_artifacts or {}
         https_artifacts = ''
         assert STDOUT_KEY not in original_artifacts
+        assert STDOUT_KEY not in in_memory_text_artifacts
         assert STDERR_KEY not in original_artifacts
+        assert STDERR_KEY not in in_memory_text_artifacts
+        # Make sure there are no overlapping keys between file artifacts and
+        # in-memory artifacts.
+        assert not (set(original_artifacts.keys()) &
+                    set(in_memory_text_artifacts.keys()))
+
         if original_artifacts:
             assert artifact_output_dir
             if not os.path.isabs(artifact_output_dir):
@@ -227,18 +254,28 @@ class ResultSinkReporter(object):
                             artifact_output_dir, artifact_filepaths[0]),
                 }
 
-        artifacts[STDOUT_KEY] = {
-            'contents': (base64.b64encode(
-                             result.out.encode('utf-8')).decode('utf-8'))
-        }
-        artifacts[STDERR_KEY] = {
-            'contents': (base64.b64encode(
-                             result.err.encode('utf-8')).decode('utf-8'))
-        }
-        html_summary = https_artifacts
-        html_summary += ('<p><text-artifact artifact-id="%s"/></p>'
-                         '<p><text-artifact artifact-id="%s"/></p>' % (
-                             STDOUT_KEY, STDERR_KEY))
+        for artifact_name, text_content in in_memory_text_artifacts.items():
+            artifacts[artifact_name] = {
+                'contents': base64.b64encode(
+                    text_content.encode('utf-8')).decode('utf-8'),
+                'content_type': 'text/plain; charset=utf-8',
+            }
+
+        for artifact_id, contents in [(STDOUT_KEY, result.out),
+                                      (STDERR_KEY, result.err)]:
+            if contents:
+                artifacts[artifact_id] = {
+                    'contents': base64.b64encode(
+                        contents.encode('utf-8')).decode('utf-8'),
+                    'content_type': 'text/plain; charset=utf-8',
+                }
+
+        if not html_summary:
+            html_summary = https_artifacts
+            for artifact_id in [STDOUT_KEY, STDERR_KEY]:
+                if artifact_id in artifacts:
+                    html_summary += (
+                        '<p><text-artifact artifact-id="%s"/></p>' % artifact_id)
 
         test_location_in_repo = self._convert_path_to_repo_path(
             os.path.normpath(test_file_location))
@@ -258,6 +295,38 @@ class ResultSinkReporter(object):
                 test_id, status, result_is_expected, artifacts, tag_list,
                 html_summary, result.took, test_metadata, result.failure_reason)
 
+    @contextlib.contextmanager
+    def batch_results(self):
+        """Begin buffering test results, which will be uploaded on exit.
+
+        This method allows callers to report multiple test results in one
+        request. Batching results can significantly improve the performance of
+        `report_individual_test_result()`, which defaults to one result per
+        request.
+
+        Usage notes:
+          * The reporter is not threadsafe while batching is active.
+          * The returned context manager is not reentrant.
+          * An exception that reaches the context manager will cancel the
+            pending upload, but is otherwise not handled.
+        """
+        if self._pending_results is not None:
+            raise ResultSinkError('`batch_results()` cannot be nested')
+        self._pending_results = json_results.ResultSet()
+        try:
+            yield
+            if self._pending_results.results:
+                payload = json.dumps({
+                    'testResults': self._pending_results.results,
+                })
+                status = self._post(self._url, payload)
+                if status != 0:
+                    # There's no easy way to pass the status code to the caller,
+                    # so signal failure through an exception instead.
+                    raise ResultSinkError(
+                        f'failed to upload batch results (status: {status})')
+        finally:
+            self._pending_results = None
 
     def _report_result(
             self, test_id, status, expected, artifacts, tag_list, html_summary,
@@ -292,6 +361,10 @@ class ResultSinkReporter(object):
                 test_id, status, expected, artifacts, tag_list, html_summary,
                 duration, test_metadata, failure_reason)
 
+        if self._pending_results:
+            self._pending_results.add(test_result)
+            # Treat the deferred upload as a tentative success.
+            return 0
         return self._post(self._url, json.dumps({'testResults': [test_result]}))
 
     def _post(self, url, content):
@@ -348,6 +421,10 @@ class ResultSinkReporter(object):
                 src_dir += self.host.sep
             self._chromium_src_dir = src_dir
         return self._chromium_src_dir
+
+
+class ResultSinkError(Exception):
+    """Base exception for errors when using a result sink reporter."""
 
 
 def _create_json_test_result(

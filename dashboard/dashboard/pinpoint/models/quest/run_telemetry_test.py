@@ -62,6 +62,16 @@ GTEST_EXECUTABLE_NAME = {
     'views_perftests': 'views_perftests'
 }
 
+_CROSSBENCH_NAME = {
+    'jetstream2.crossbench': 'jetstream_2.2',
+    'motionmark1.3.crossbench': 'motionmark_1.3',
+    'speedometer3.crossbench': 'speedometer_3.0',
+    'speedometer2.0.crossbench': 'speedometer_2.0',
+    'speedometer2.1.crossbench': 'speedometer_2.1',
+    'loadline_phone.crossbench': 'loadline-phone',
+    'loadline_tablet.crossbench': 'loadline-tablet'
+}
+
 
 def _StoryToRegex(story_name):
   # Telemetry's --story-filter argument takes in a regex, not a
@@ -77,8 +87,6 @@ def ChangeDependentArgs(args, change):
   # Telemetry parameter `--results-label <change>` to the runs.
   extra_args = list(args)
   extra_args += ('--results-label', str(change))
-  if '--story-filter' in extra_args:
-    extra_args.append('--run-full-story-set')
   if change.change_args:
     extra_args.extend(change.change_args)
   return extra_args
@@ -93,18 +101,20 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
     # deprecated and will be removed soon (EOY 2020).
     # TODO(dberris): Move this out to a configuration elsewhere.
     benchmark = arguments.get('benchmark')
+    command = [
+        'luci-auth',
+        'context',
+        '--',
+        'vpython3',
+        '../../testing/test_env.py',
+        '../../testing/scripts/run_performance_tests.py',
+    ]
     if benchmark in _WATERFALL_ENABLED_GTEST_NAMES:
-      command = [
-          'luci-auth', 'context', '--', 'vpython3', '../../testing/test_env.py',
-          '../../testing/scripts/run_performance_tests.py',
-          GTEST_EXECUTABLE_NAME[benchmark]
-      ]
+      command.append(GTEST_EXECUTABLE_NAME[benchmark])
+    elif benchmark in _CROSSBENCH_NAME:
+      command.append('../../third_party/crossbench/cb.py')
     else:
-      command = [
-          'luci-auth', 'context', '--', 'vpython3', '../../testing/test_env.py',
-          '../../testing/scripts/run_performance_tests.py',
-          '../../tools/perf/run_benchmark'
-      ]
+      command.append('../../tools/perf/run_benchmark')
     relative_cwd = arguments.get('relative_cwd', 'out/Release')
     return relative_cwd, command
 
@@ -119,17 +129,34 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
         execution_timeout_secs=None)
 
   @classmethod
+  def _CrossbenchExtraTestArgs(cls, benchmark, arguments):
+    extra_test_args = []
+    extra_test_args.append(f'--benchmark-display-name={benchmark}')
+    extra_test_args.append(f'--benchmarks={_CROSSBENCH_NAME[benchmark]}')
+
+    browser = arguments.get('browser')
+    if not browser:
+      raise TypeError('Missing "browser" argument for crossbench.')
+    extra_test_args.append(f'--browser={browser}')
+
+    extra_test_args += super()._ExtraTestArgs(arguments)
+    return extra_test_args
+
+  @classmethod
   def _ExtraTestArgs(cls, arguments):
+    benchmark = arguments.get('benchmark')
+    if not benchmark:
+      raise TypeError('Missing "benchmark" argument.')
+
+    if benchmark in _CROSSBENCH_NAME:
+      return cls._CrossbenchExtraTestArgs(benchmark, arguments)
+
     extra_test_args = []
 
     # If we're running a single test,
     # do so even if it's configured to be ignored in expectations.config.
     if not arguments.get('story_tags'):
       extra_test_args.append('-d')
-
-    benchmark = arguments.get('benchmark')
-    if not benchmark:
-      raise TypeError('Missing "benchmark" argument.')
 
     if benchmark in _WATERFALL_ENABLED_GTEST_NAMES:
       # crbug/1146949
@@ -144,16 +171,12 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
 
     story = arguments.get('story')
     if story:
-      # TODO(crbug.com/982027): Note that usage of "--run-full-story-set"
-      # and "--story-filter"
-      # may be replaced with --story=<story> (no regex needed). Support
-      # for --story flag landed in
-      # https://chromium-review.googlesource.com/c/catapult/+/1869800
-      # (Oct 22, 2019)
-      # so we cannot turn this on by default until we no longer need to
-      # be able to run revisions older than that. In the meantime, the
-      # following argument plus the --run-full-story-set argument added in
-      # Start() accomplish the same thing.
+      # TODO(crbug.com/982027): Note that usage of  "--story-filter" may be
+      # replaced with --story=<story> (no regex needed). Support for --story
+      # flag landed in
+      # https://chromium-review.googlesource.com/c/catapult/+/1869800 (Oct 22,
+      # 2019) so we cannot turn this on by default until we no longer need to be
+      # able to run revisions older than that.
       extra_test_args += ('--story-filter', _StoryToRegex(story))
 
     story_tags = arguments.get('story_tags')

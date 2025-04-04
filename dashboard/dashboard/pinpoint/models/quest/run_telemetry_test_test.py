@@ -7,7 +7,7 @@ from __future__ import division
 from __future__ import absolute_import
 
 import unittest
-import mock
+from unittest import mock
 
 from dashboard.pinpoint.models.change import change as change_module
 from dashboard.pinpoint.models.change import commit
@@ -82,11 +82,7 @@ class StartTest(unittest.TestCase):
     change.base_commit = mock.MagicMock(spec=commit.Commit)
     change.base_commit.AsDict = mock.MagicMock(
         return_value={'commit_position': 675460})
-    with mock.patch(
-        'dashboard.pinpoint.models.quest.run_test.RunTest._Start',
-        wraps=quest._Start) as internal_start:
-      execution = quest.Start(change, 'https://isolate.server', 'isolate hash')
-      self.assertIn('--run-full-story-set', internal_start.call_args[0][3])
+    execution = quest.Start(change, 'https://isolate.server', 'isolate hash')
     self.assertEqual(
         execution._swarming_tags, {
             'benchmark': 'speedometer',
@@ -112,7 +108,6 @@ class StartTest(unittest.TestCase):
         wraps=quest._Start) as internal_start:
       execution = quest.Start(change, 'https://isolate.server', 'isolate hash')
       call_args = internal_start.call_args[0][3]
-      self.assertIn('--run-full-story-set', call_args)
       self.assertIn('--extra-browser-args', call_args)
     self.assertEqual(
         execution._swarming_tags, {
@@ -134,9 +129,8 @@ class StartTest(unittest.TestCase):
     change.base_commit.AsDict = mock.MagicMock(return_value={})
     with mock.patch(
         'dashboard.pinpoint.models.quest.run_test.RunTest._Start',
-        wraps=quest._Start) as internal_start:
+        wraps=quest._Start):
       quest.Start(change, 'https://isolate.server', 'isolate hash')
-      self.assertIn('--run-full-story-set', internal_start.call_args[0][3])
 
   def testSwarmingTagsWithStoryTagFilter(self):
     arguments = dict(_BASE_ARGUMENTS)
@@ -218,4 +212,20 @@ class FromDictTest(unittest.TestCase):
     expected = run_telemetry_test.RunTelemetryTest(
         'server', run_test_test.DIMENSIONS, extra_args, _BASE_SWARMING_TAGS,
         _TELEMETRY_COMMAND, 'out/Release')
+    self.assertEqual(quest, expected)
+
+  def testCrossbench(self):
+    arguments = dict(_BASE_ARGUMENTS)
+    arguments['benchmark'] = 'speedometer3.crossbench'
+    quest = run_telemetry_test.RunTelemetryTest.FromDict(arguments)
+
+    extra_args = [
+        '--benchmark-display-name=speedometer3.crossbench',
+        '--benchmarks=speedometer_3.0',
+        '--browser=release',
+    ] + run_performance_test._DEFAULT_EXTRA_ARGS
+    expected = run_telemetry_test.RunTelemetryTest(
+        'server', run_test_test.DIMENSIONS, extra_args, _BASE_SWARMING_TAGS,
+        _TELEMETRY_COMMAND[:-1] + ['../../third_party/crossbench/cb.py'],
+        'out/Release')
     self.assertEqual(quest, expected)

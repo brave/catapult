@@ -7,7 +7,6 @@ from __future__ import absolute_import
 import contextlib
 import itertools
 import logging
-import optparse  # pylint: disable=deprecated-module
 import os
 import re
 import sys
@@ -58,50 +57,64 @@ class ArchiveError(Exception):
 def AddCommandLineArgs(parser):
   story_filter_module.StoryFilterFactory.AddCommandLineArgs(parser)
 
-  group = optparse.OptionGroup(parser, 'Story runner options')
+  group = parser.add_argument_group('Story runner options')
   # Note that the default for pageset-repeat is 1 unless the benchmark
   # specifies a different default by adding
   # `options = {'pageset_repeat': X}` in their benchmark. Defaults are always
   # overridden by passed in commandline arguments.
-  group.add_option('--pageset-repeat', default=1, type='int',
-                   help='Number of times to repeat the entire pageset. ')
+  group.add_argument('--pageset-repeat',
+                     default=1,
+                     type=int,
+                     help='Number of times to repeat the entire pageset.')
   # TODO(crbug.com/910809): Add flag to reduce iterations to 1.
   # (An iteration is a repeat of the benchmark without restarting Chrome. It
   # must be supported in benchmark-specific code.) This supports the smoke
   # test use case since we don't want to waste time with iterations in smoke
   # tests.
-  group.add_option('--max-failures', default=None, type='int',
-                   help='Maximum number of test failures before aborting '
-                   'the run. Defaults to the number specified by the '
-                   'PageTest.')
-  group.add_option('--pause', dest='pause', default=None,
-                   choices=_PAUSE_STAGES,
-                   help='Pause for interaction at the specified stage. '
-                   'Valid stages are %s.' % ', '.join(_PAUSE_STAGES))
-  group.add_option('--suppress-gtest-report', action='store_true',
-                   help='Suppress gtest style report of progress as stories '
-                   'are being run.')
-  group.add_option('--skip-typ-expectations-tags-validation',
-                   action='store_true',
-                   help='Suppress typ expectation tags validation errors.')
-  parser.add_option_group(group)
+  group.add_argument('--max-failures',
+                     default=None,
+                     type=int,
+                     help=('Maximum number of test failures before aborting '
+                           'the run. Defaults to the number specified by the '
+                           'PageTest.'))
+  group.add_argument('--pause',
+                     choices=_PAUSE_STAGES,
+                     help='Pause for interaction at the specified stage.')
+  group.add_argument('--suppress-gtest-report',
+                     action='store_true',
+                     help=('Suppress gtest style report of progress as stories '
+                           'are being run.'))
+  group.add_argument('--skip-typ-expectations-tags-validation',
+                     action='store_true',
+                     help='Suppress typ expectation tags validation errors.')
 
-  group = optparse.OptionGroup(parser, 'Web Page Replay options')
-  group.add_option(
+  group = parser.add_argument_group('Web Page Replay options')
+  group.add_argument(
       '--use-live-sites',
-      dest='use_live_sites', action='store_true',
+      action='store_true',
       help='Run against live sites and ignore the Web Page Replay archives.')
-  parser.add_option_group(group)
 
-  parser.add_option('-p', '--print-only', dest='print_only',
-                    choices=['stories', 'tags', 'both'], default=None)
-  parser.add_option('-w', '--wait-for-cpu-temp',
-                    dest='wait_for_cpu_temp', action='store_true',
-                    default=False,
-                    help='Introduces a wait between each story '
-                    'until the device CPU has cooled down. If '
-                    'not specified, this wait is disabled. '
-                    'Device must be supported. ')
+  parser.add_argument('-p',
+                      '--print-only',
+                      choices=['stories', 'tags', 'both'],
+                      help='Skip running stories and only print their '
+                      'names/tags/both. By default this option will print all '
+                      'stories regardless of expectations.config filtering. If '
+                      'you want the filtered list, pass --print-only-runnable.')
+  parser.add_argument(
+      '--print-only-runnable',
+      action='store_true',
+      default=False,
+      help='When -p/--print-only is set, skip stories ignored by '
+      'expectations.config instead of printing all stories.')
+  parser.add_argument(
+      '-w',
+      '--wait-for-cpu-temp',
+      action='store_true',
+      default=False,
+      help=('Introduces a wait between each story until the device CPU has '
+            'cooled down. If not specified, this wait is disabled. Device must '
+            'be supported. '))
 
 
 def ProcessCommandLineArgs(parser, args, environment=None):
@@ -281,6 +294,8 @@ def RunStorySet(test, story_set, finder_options, results,
     else:
       format_string = '%s%s'
     for s in stories:
+      if finder_options.print_only_runnable and story_filter.ShouldSkip(s):
+        continue
       print(format_string % (s.name, ','.join(s.tags) if include_tags else ''))
     return
 
@@ -331,7 +346,7 @@ def RunStorySet(test, story_set, finder_options, results,
               test, finder_options.Copy(), story_set, possible_browser)
 
         with results.CreateStoryRun(story, storyset_repeat_counter):
-          skip_reason = story_filter.ShouldSkip(story)
+          skip_reason = story_filter.ShouldSkip(story, should_log=True)
           if skip_reason:
             results.Skip(skip_reason)
             continue
@@ -404,7 +419,7 @@ def ValidateStory(story):
 
 
 def _ShouldRunBenchmark(benchmark, possible_browser, finder_options):
-  if finder_options.print_only:
+  if finder_options.print_only and not finder_options.print_only_runnable:
     return True  # Should always run on print-only mode.
   if benchmark.CanRunOnPlatform(possible_browser.platform, finder_options):
     return True
@@ -445,6 +460,10 @@ def RunBenchmark(benchmark, finder_options):
     test = benchmark.CreatePageTest(finder_options)
     test.__name__ = benchmark.__class__.__name__
 
+    # Add the OS to the `finder_options` so that benchmarks can filter out
+    # stories that are only supported on subsets of OSes which the benchmark
+    # supports.
+    finder_options.os_name = possible_browser.platform.GetOSName()
     story_set = benchmark.CreateStorySet(finder_options)
 
     if isinstance(test, legacy_page_test.LegacyPageTest):

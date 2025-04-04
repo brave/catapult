@@ -13,6 +13,180 @@ Expectation = expectations_parser.Expectation
 TestExpectations = expectations_parser.TestExpectations
 
 
+class ExpectationTest(unittest.TestCase):
+    def create_expectation_with_values(self,
+                                       reason='crbug.com/1234',
+                                       test='foo',
+                                       retry_on_failure=True,
+                                       is_slow_test=True,
+                                       tags=['win'],
+                                       results=['FAIL'],
+                                       lineno=10,
+                                       is_glob=False,
+                                       full_wildcard_support=False,
+                                       trailing_comments=' # comment',
+                                       encode_func=None):
+        return expectations_parser.Expectation(
+            reason=reason,
+            test=test,
+            retry_on_failure=retry_on_failure,
+            is_slow_test=is_slow_test,
+            tags=tags,
+            results=results,
+            lineno=lineno,
+            is_glob=is_glob,
+            full_wildcard_support=full_wildcard_support,
+            trailing_comments=trailing_comments,
+            encode_func=encode_func)
+
+    def testEquality(self):
+        e = self.create_expectation_with_values()
+        other = self.create_expectation_with_values()
+        self.assertEqual(e, other)
+
+        other = self.create_expectation_with_values(reason='crbug.com/2345')
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(test='bar')
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(retry_on_failure=False)
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(is_slow_test=False)
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(tags=['linux'])
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(results=['Pass'])
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(lineno=20)
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(trailing_comments='c')
+        self.assertNotEqual(e, other)
+
+        other = self.create_expectation_with_values(encode_func=lambda x: x)
+        self.assertNotEqual(e, other)
+
+        # Glob-iness should not have an inherent effect on equality.
+        other = self.create_expectation_with_values(is_glob=True)
+        self.assertEqual(e, other)
+        other = self.create_expectation_with_values(
+            is_glob=True, full_wildcard_support=True)
+        self.assertEqual(e, other)
+
+    def testToString(self):
+        # All standard fields, non-wildcard.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='test_name',
+                                            tags=['win', 'intel'],
+                                            results=['FAIL', 'PASS'],
+                                            trailing_comments=' # comment')
+        self.assertEqual(
+            e.to_string(),
+            'crbug.com/1234 [ Intel Win ] test_name [ Failure Pass ] # comment')
+
+        # RetryOnFailure.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='test_name',
+                                            tags=['win'],
+                                            results=['PASS'],
+                                            trailing_comments=' # comment',
+                                            retry_on_failure=True)
+        self.assertEqual(
+            e.to_string(),
+            'crbug.com/1234 [ Win ] test_name [ Pass RetryOnFailure ] # comment')
+
+        # Slow.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='test_name',
+                                            tags=['win'],
+                                            results=['PASS'],
+                                            trailing_comments=' # comment',
+                                            is_slow_test=True)
+        self.assertEqual(
+            e.to_string(),
+            'crbug.com/1234 [ Win ] test_name [ Pass Slow ] # comment')
+
+        # Encode applied.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='foo',
+                                            tags=['win'],
+                                            results=['FAIL'],
+                                            trailing_comments=' # comment',
+                                            encode_func=lambda _: 'bar')
+        self.assertEqual(e.to_string(),
+                        'crbug.com/1234 [ Win ] bar [ Failure ] # comment')
+
+        # Limited wildcard.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='foo*test*',
+                                            tags=['win'],
+                                            results=['FAIL'],
+                                            trailing_comments=' # comment',
+                                            is_glob=True)
+        self.assertEqual(
+            e.to_string(),
+            'crbug.com/1234 [ Win ] foo\\*test* [ Failure ] # comment')
+
+        # Full wildcard support.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='foo*bar\\*test*',
+                                            tags=['win'],
+                                            results=['FAIL'],
+                                            trailing_comments=' # comment',
+                                            is_glob=True,
+                                            full_wildcard_support=True)
+        self.assertEqual(
+            e.to_string(),
+            'crbug.com/1234 [ Win ] foo*bar\\*test* [ Failure ] # comment')
+
+        # Limited wildcard without trailing wildcard.
+        e = expectations_parser.Expectation(reason='crbug.com/1234',
+                                            test='foo*test',
+                                            tags=['win'],
+                                            results=['FAIL'],
+                                            trailing_comments=' # comment',
+                                            is_glob=True)
+        with self.assertRaisesRegexp(
+            AssertionError, '.*the test value must end in an asterisk'):
+            e.to_string()
+
+    def testTestSetter(self):
+        # Success, no wildcard.
+        e = expectations_parser.Expectation()
+        e.test = 'test_name'
+        self.assertEqual(e.test, 'test_name')
+
+        # Failure, empty.
+        e = expectations_parser.Expectation()
+        with self.assertRaisesRegexp(ValueError,
+                                     'Cannot set test to empty string'):
+            e.test = ''
+
+        # Success, limited wildcard.
+        e = expectations_parser.Expectation(is_glob=True)
+        e.test = 'test_*'
+        self.assertEqual(e.test, 'test_*')
+
+        # Failure, limited wildcard without trailing *.
+        e = expectations_parser.Expectation(is_glob=True)
+        with self.assertRaisesRegexp(ValueError,
+                                     ('test value for glob type expectations '
+                                      'without full wildcard support must end '
+                                      'with an asterisk')):
+            e.test = 'test_name'
+
+        # Success, full wildcard support.
+        e = expectations_parser.Expectation(
+            is_glob=True, full_wildcard_support=True)
+        e.test = 'test_name'
+        self.assertEqual(e.test, 'test_name')
+
+
 class TaggedTestListParserTest(unittest.TestCase):
     def testInitWithGoodData(self):
         good_data = """
@@ -203,30 +377,6 @@ crbug.com/12345 [ tag1 ] b1/s1 [ Skip ]
         expected_outcomes = [
             expectations_parser.Expectation(
                 'crbug.com/123', 'b.1/http://google.com', ['mac'], ['SKIP'], 3)
-        ]
-        parser = expectations_parser.TaggedTestListParser(raw_data)
-        for i in range(len(parser.expectations)):
-            self.assertEqual(parser.expectations[i], expected_outcomes[i])
-
-    def testParseExpectationSpaceEscapeInTestName(self):
-        raw_data = (
-            '# tags: [ Mac ]\n# results: [ Skip ]\ncrbug.com/123 [ Mac ] http://google.com/Foo%20Bar [ Skip ]'
-        )
-        expected_outcomes = [
-            expectations_parser.Expectation(
-                'crbug.com/123', 'http://google.com/Foo Bar', ['mac'], ['SKIP'], 3)
-        ]
-        parser = expectations_parser.TaggedTestListParser(raw_data)
-        for i in range(len(parser.expectations)):
-            self.assertEqual(parser.expectations[i], expected_outcomes[i])
-
-    def testParseExpectationPercentEscapeInTestName(self):
-        raw_data = (
-            '# tags: [ Mac ]\n# results: [ Skip ]\ncrbug.com/123 [ Mac ] http://google.com/Foo%2520Bar [ Skip ]'
-        )
-        expected_outcomes = [
-            expectations_parser.Expectation(
-                'crbug.com/123', 'http://google.com/Foo%20Bar', ['mac'], ['SKIP'], 3)
         ]
         parser = expectations_parser.TaggedTestListParser(raw_data)
         for i in range(len(parser.expectations)):
@@ -446,6 +596,81 @@ crbug.com/12345 [ tag3 tag4 ] b1/s1 [ Skip ]
         self.assertTrue(exp.is_default_pass)
         self.assertTrue(exp.should_retry_on_failure)
 
+    def testFullWildcardSupportDefaultFalse(self):
+        raw_data = (
+            '# tags: [ Linux ]\n'
+            '# results: [ Failure ]\n'
+            'crbug.com/1234 [ linux ] b1/s1 [ Failure ]\n'
+            'crbug.com/2345 [ linux ] b2/* [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        for e in parser.expectations:
+            self.assertFalse(e.full_wildcard_support)
+
+    def testFullWildcardSupportAnnotationTrue(self):
+        raw_data = (
+            '# tags: [ Linux ]\n'
+            '# results: [ Failure ]\n'
+            '# full_wildcard_support: true\n'
+            'crbug.com/1234 [ linux ] b1/s1 [ Failure ]\n'
+            'crbug.com/2345 [ linux ] b2/* [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        for e in parser.expectations:
+            self.assertTrue(e.full_wildcard_support)
+
+    def testFullWildcardSupportInvalidValue(self):
+        raw_data = (
+            '# tags: [ Linux ]\n'
+            '# results: [ Failure ]\n'
+            '# full_wildcard_support: asdf\n'
+            'crbug.com/1234 [ linux ] b1/s1 [ Failure ]\n'
+            'crbug.com/2345 [ linux ] b2/* [ Failure ]\n')
+        with self.assertRaisesRegexp(expectations_parser.ParseError,
+                                     ("Unrecognized value 'asdf' given for "
+                                      'full_wildcard_support descriptor')):
+            expectations_parser.TaggedTestListParser(raw_data)
+
+    def testIsGlobDetection(self):
+        header = (
+            '# tags: [ Linux ]\n'
+            '# results: [ Failure ]\n')
+
+        # No full wildcard support, no wildcard.
+        raw_data = (
+            header +
+            '[ linux ] test [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        self.assertFalse(parser.expectations[0].is_glob)
+
+        # No full wildcard support, escaped wildcard.
+        raw_data = (
+            header +
+            '[ linux ] test\\* [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        self.assertFalse(parser.expectations[0].is_glob)
+
+        # No full wildcard support, wildcard.
+        raw_data = (
+            header +
+            '[ linux ] test* [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        self.assertTrue(parser.expectations[0].is_glob)
+
+        # Full wildcard support, all wildcards escaped.
+        raw_data = (
+            header +
+            '# full_wildcard_support: true\n'
+            '[ linux ] foo\\*bar\\* [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        self.assertFalse(parser.expectations[0].is_glob)
+
+        # Full wildcard support, not all wildcards escaped.
+        raw_data = (
+            header +
+            '# full_wildcard_support: true\n'
+            '[ linux ] foo*bar\\* [ Failure ]\n')
+        parser = expectations_parser.TaggedTestListParser(raw_data)
+        self.assertTrue(parser.expectations[0].is_glob)
+
     def testGetExpectationsFromGlob(self):
         raw_data = (
             '# tags: [ Linux ]\n'
@@ -466,6 +691,63 @@ crbug.com/12345 [ tag3 tag4 ] b1/s1 [ Skip ]
         expectations.parse_tagged_list(raw_data)
         exp = expectations.expectations_for('b1/s1')
         self.assertEqual(exp.results, set([ResultType.Pass]))
+
+    def testGetExpectationsFromGlobFullWildcardSupport(self):
+        header = (
+            '# tags: [ Linux ]\n'
+            '# results: [ Failure ]\n'
+            '# full_wildcard_support: true\n')
+
+        # Escaped wildcard.
+        raw_data = (
+            header +
+            '[ linux ] foo\\*bar [ Failure ]\n')
+        expectations = expectations_parser.TestExpectations(tags=['linux'])
+        expectations.parse_tagged_list(raw_data)
+        exp = expectations.expectations_for('foo.bar')
+        self.assertEqual(exp.results, {ResultType.Pass})
+        exp = expectations.expectations_for('foo*bar')
+        self.assertEqual(exp.results, {ResultType.Failure})
+
+        # Non-escaped wildcard.
+        raw_data = (
+            header +
+            '[ linux ] foo*bar [ Failure ]\n')
+        expectations = expectations_parser.TestExpectations(tags=['linux'])
+        expectations.parse_tagged_list(raw_data)
+        exp = expectations.expectations_for('foo.bar')
+        self.assertEqual(exp.results, {ResultType.Failure})
+        exp = expectations.expectations_for('foo*bar')
+        self.assertEqual(exp.results, {ResultType.Failure})
+        exp = expectations.expectations_for('foobar')
+        self.assertEqual(exp.results, {ResultType.Failure})
+        exp = expectations.expectations_for(
+            'foo_anything_should_match_here_bar')
+        self.assertEqual(exp.results, {ResultType.Failure})
+        exp = expectations.expectations_for('not_matching')
+        self.assertEqual(exp.results, {ResultType.Pass})
+
+        # Multiple non-escaped wildcards.
+        raw_data = (
+            header +
+            '[ linux ] foo*bar*baz [ Failure ]\n')
+        expectations = expectations_parser.TestExpectations(tags=['linux'])
+        expectations.parse_tagged_list(raw_data)
+        exp = expectations.expectations_for('foo123bar123baz')
+        self.assertEqual(exp.results, {ResultType.Failure})
+        exp = expectations.expectations_for('foobarbaz')
+        self.assertEqual(exp.results, {ResultType.Failure})
+
+        # Mix of escaped and non-escaped wildcards.
+        raw_data = (
+            header +
+            '[ linux ] foo\\*bar*baz [ Failure ]\n')
+        expectations = expectations_parser.TestExpectations(tags=['linux'])
+        expectations.parse_tagged_list(raw_data)
+        exp = expectations.expectations_for('foo*bar123baz')
+        self.assertEqual(exp.results, {ResultType.Failure})
+        exp = expectations.expectations_for('foo123bar123baz')
+        self.assertEqual(exp.results, {ResultType.Pass})
 
     def testIsTestRetryOnFailure(self):
         raw_data = (
@@ -901,6 +1183,18 @@ crbug.com/12345 [ tag3 tag4 ] b1/s1 [ Skip ]
             ['a/b/c/d', 'a/b', 'a/b/c'])
         self.assertEqual(broken_expectations[0].test, 'a/b/d*')
 
+    def testExpectationWithFullWildcardGlobIsBroken(self):
+        test_expectations = (
+            '# results: [ Failure ]\n'
+            '# full_wildcard_support: true\n'
+            'a/*/ [ Failure ]')
+        expectations = expectations_parser.TestExpectations()
+        expectations.parse_tagged_list(test_expectations, 'test.txt')
+        broken_expectations = expectations.check_for_broken_expectations(
+            ['a/b/c/d', 'a/b', 'a/b/c'])
+        broken_test_names = [e.test for e in broken_expectations]
+        self.assertEqual(broken_test_names, ['a/*/'])
+
     def testExpectationWithGlobIsNotBroken(self):
         test_expectations = '# results: [ Failure ]\na/b* [ Failure ]'
         expectations = expectations_parser.TestExpectations()
@@ -908,6 +1202,18 @@ crbug.com/12345 [ tag3 tag4 ] b1/s1 [ Skip ]
         broken_expectations = expectations.check_for_broken_expectations(
             ['a/b'])
         self.assertFalse(broken_expectations)
+
+    def testExpectationWithFullWildcardGlobIsNotBroken(self):
+        test_expectations = (
+            '# results: [ Failure ]\n'
+            '# full_wildcard_support: true\n'
+            'a/* [ Failure ]')
+        expectations = expectations_parser.TestExpectations()
+        expectations.parse_tagged_list(test_expectations, 'test.txt')
+        broken_expectations = expectations.check_for_broken_expectations(
+            ['a/b/c/d', 'a/b', 'a/b/c'])
+        broken_test_names = [e.test for e in broken_expectations]
+        self.assertEqual(broken_test_names, [])
 
     def testNonDeclaredSystemConditionTagRaisesException(self):
         test_expectations = '''# tags: [ InTel AMD nvidia ]
@@ -984,20 +1290,6 @@ crbug.com/12345 [ tag3 tag4 ] b1/s1 [ Skip ]
                           retry_on_failure=True)
         self.assertEqual(
             exp.to_string(), 'crbug.com/123 [ Intel ] test.html?\* [ Failure Pass RetryOnFailure Slow ]')
-
-    def testExpectationWithSpaceInTestNameToString(self):
-        exp = Expectation(reason='crbug.com/123', test='test.html?Foo Bar', tags=['intel'],
-                          results={ResultType.Pass, ResultType.Failure}, is_slow_test=False,
-                          retry_on_failure=False)
-        self.assertEqual(
-            exp.to_string(), 'crbug.com/123 [ Intel ] test.html?Foo%20Bar [ Failure Pass ]')
-
-    def testExpectationWithPercentInTestNameToString(self):
-        exp = Expectation(reason='crbug.com/123', test='test.html?Foo%Bar', tags=['intel'],
-                          results={ResultType.Pass, ResultType.Failure}, is_slow_test=False,
-                          retry_on_failure=False)
-        self.assertEqual(
-            exp.to_string(), 'crbug.com/123 [ Intel ] test.html?Foo%25Bar [ Failure Pass ]')
 
     def testGlobExpectationToString(self):
         exp = Expectation(reason='crbug.com/123', test='a/*/test.html?*', tags=['intel'],

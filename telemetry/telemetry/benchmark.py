@@ -4,7 +4,6 @@
 
 from __future__ import absolute_import
 import logging
-import optparse  # pylint: disable=deprecated-module
 import six
 
 from telemetry import decorators
@@ -89,8 +88,9 @@ class Benchmark(command_line.Command):
     Returns:
       An exit code from exit_codes module describing what happened.
     """
-    args.target_platforms = self.GetSupportedPlatformNames(
-        self.SUPPORTED_PLATFORMS)
+    if not args.target_platforms:
+      args.target_platforms = self.GetSupportedPlatformNames(
+          self.SUPPORTED_PLATFORMS)
     return story_runner.RunBenchmark(self, args)
 
   @property
@@ -103,10 +103,8 @@ class Benchmark(command_line.Command):
 
   @classmethod
   def AddCommandLineArgs(cls, parser):
-    group = optparse.OptionGroup(parser, '%s test options' % cls.Name())
+    group = parser.add_argument_group(f'{cls.Name()} test options')
     cls.AddBenchmarkCommandLineArgs(group)
-    if group.option_list:
-      parser.add_option_group(group)
 
   @classmethod
   def AddBenchmarkCommandLineArgs(cls, parser):

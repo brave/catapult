@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 # Copyright 2020 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -48,6 +48,16 @@ _HOST_ARCH = [{
 }]
 
 _CHROMIUM_DEPS = {
+    'devil_util_device': {
+        'archs': _DEVICE_ARCHS,
+        'build_path': 'devil_util_bin',
+        'target_name': 'devil_util',
+    },
+    'devil_util_host': {
+        'archs': _HOST_ARCH,
+        'build_path': 'clang_x64/devil_util_bin',
+        'target_name': 'devil_util',
+    },
     'chromium_commands': {
         'archs': _HOST_ARCH,
         'build_path': 'lib.java/chromium_commands.dex.jar',
@@ -63,16 +73,6 @@ _CHROMIUM_DEPS = {
         'build_path': 'clang_x64/host_forwarder',
         'target_name': 'forwarder2',
     },
-    'md5sum_device': {
-        'archs': _DEVICE_ARCHS,
-        'build_path': 'md5sum_bin',
-        'target_name': 'md5sum',
-    },
-    'md5sum_host': {
-        'archs': _HOST_ARCH,
-        'build_path': 'clang_x64/md5sum_bin',
-        'target_name': 'md5sum',
-    },
 }
 
 
@@ -87,7 +87,6 @@ def BuildTargetsForCpu(targets, cpu, output_dir):
       'symbol_level=1',
       'target_cpu="%s"' % cpu,
       'target_os="android"',
-      'use_goma=true',
   ]
 
   cmd = ['gn', 'gen', '--args=%s' % (' '.join(gn_args)), output_dir]

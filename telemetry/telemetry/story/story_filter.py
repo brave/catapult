@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 from __future__ import absolute_import
-import optparse  # pylint:disable=deprecated-module
 import os
 import logging
 import re
@@ -74,65 +73,67 @@ class StoryFilterFactory():
 
   @classmethod
   def AddCommandLineArgs(cls, parser):
-    group = optparse.OptionGroup(parser, 'User story filtering options')
-    group.add_option(
+    group = parser.add_argument_group('User story filtering options')
+    group.add_argument(
         '--story-filter',
         help='Use only stories whose names match the given filter regexp.')
-    group.add_option(
+    group.add_argument(
         '--story-filter-exclude',
         help='Exclude stories whose names match the given filter regexp.')
-    group.add_option(
-        '--story-tag-filter',
-        help='Use only stories that have any of these tags')
-    group.add_option(
-        '--story-tag-filter-exclude',
-        help='Exclude stories that have any of these tags')
+    group.add_argument('--story-tag-filter',
+                       help='Use only stories that have any of these tags')
+    group.add_argument('--story-tag-filter-exclude',
+                       help='Exclude stories that have any of these tags')
     common_story_shard_help = (
         'Indices start at 0, and have the same rules as python slices,'
         ' e.g.  [4, 5, 6, 7, 8][0:3] -> [4, 5, 6])')
-    group.add_option(
-        '--story-shard-begin-index', type='int', dest='story_shard_begin_index',
-        help=('Beginning index of set of stories to run. If this is ommited, '
-              'the starting index will be from the first story in the benchmark'
-              + common_story_shard_help))
-    group.add_option(
-        '--story-shard-end-index', type='int', dest='story_shard_end_index',
+    group.add_argument(
+        '--story-shard-begin-index',
+        type=int,
+        help=(
+            'Beginning index of set of stories to run. If this is ommited, '
+            'the starting index will be from the first story in the benchmark' +
+            common_story_shard_help))
+    group.add_argument(
+        '--story-shard-end-index',
+        type=int,
         help=('End index of set of stories to run. Value will be '
               'rounded down to the number of stories. Negative values not'
               'allowed. If this is omited, the end index is the final story'
-              'of the benchmark. '+ common_story_shard_help))
-    group.add_option(
-        '--story-shard-indexes', type='string', dest='story_shard_indexes',
+              'of the benchmark. ' + common_story_shard_help))
+    group.add_argument(
+        '--story-shard-indexes',
         help=('Index ranges of sets of stories to run. (Negative values not '
               'allowed.) Each range can be a single index or a range in '
               '"begin-end" format. E.g., 2,4-6 means stories on index 2, 4, '
-              '5 and 6. Ranges should be ordered. '+ common_story_shard_help))
+              '5 and 6. Ranges should be ordered. ' + common_story_shard_help))
     # This should be renamed to --also-run-disabled-stories.
-    group.add_option('-d', '--also-run-disabled-tests',
-                     dest='run_disabled_stories',
-                     action='store_true', default=False,
-                     help='Ignore expectations.config disabling.')
-    # TODO(crbug.com/965158): delete this flag.
-    group.add_option(
-        '--run-full-story-set', action='store_true', default=False,
-        help='DEPRECATED. Does not do anything. Use --run-abridged-story-set '
-        'instead.')
-    group.add_option(
-        '--run-abridged-story-set', action='store_true', default=None,
-        help='Whether to run the abridged set of stories from the benchmark '
-        'instead of the whole set of stories. Note that many benchmarks do not '
-        'have an abridged version: for those benchmarks this flag will have no '
-        'effect.')
-    group.add_option(
-        '--story', action='append', dest='stories',
-        help='An exact name of a story to run. These strings should be '
-        'the exact values as stored in the name attribute of a story object. '
-        'Passing in a story name this way will cause the story to run even '
-        'if it is marked as "Skip" in the expectations config. '
-        'This name does not include the benchmark name. This flag can be '
-        'provided multiple times to chose to run multiple stories. '
-        'The story flag is exclusive with other story selection flags.')
-    parser.add_option_group(group)
+    group.add_argument('-d',
+                       '--also-run-disabled-tests',
+                       dest='run_disabled_stories',
+                       action='store_true',
+                       default=False,
+                       help='Ignore expectations.config disabling.')
+    group.add_argument(
+        '--run-abridged-story-set',
+        action='store_true',
+        default=None,
+        help=('Whether to run the abridged set of stories from the benchmark '
+              'instead of the whole set of stories. Note that many benchmarks '
+              'do not have an abridged version: for those benchmarks this flag '
+              'will have no effect.'))
+    group.add_argument(
+        '--story',
+        action='append',
+        dest='stories',
+        help=('An exact name of a story to run. These strings should be '
+              'the exact values as stored in the name attribute of a story '
+              'object. Passing in a story name this way will cause the story '
+              'to run even if it is marked as "Skip" in the expectations '
+              'config. This name does not include the benchmark name. This '
+              'flag can be provided multiple times to chose to run multiple '
+              'stories. The story flag is exclusive with other story selection '
+              'flags.'))
 
   @classmethod
   def ProcessCommandLineArgs(cls, parser, args, environment=None):
@@ -264,35 +265,42 @@ class StoryFilter():
       included_stories.append(story)
     return self._ApplyShards(included_stories)
 
-  def ShouldSkip(self, story):
+  def ShouldSkip(self, story, should_log=False):
     """Decides whether a story should be marked skipped.
 
-    The difference between marking a story skipped and simply not running
-    it is important for tracking purposes. Officially skipped stories show
-    up in test results outputs.
+    The difference between marking a story skipped and simply not running it is
+    important for tracking purposes. Officially skipped stories show up in test
+    results outputs.
 
     Args:
       story: A story.Story object.
+      should_log: Whether the reason should be logged via logging. Default False
+                  to avoid logging the reason multiple times.
 
     Returns:
-      A skip reason string if the story should be skipped, otherwise an
-      empty string.
+      An empty string if the story should *not* be skipped, otherwise a string
+      with the reason why the story should be skipped.
     """
-    disabled = self._expectations.IsStoryDisabled(story)
-    if self._stories:
-      if story.name in self._stories:
-        if disabled:
-          logging.warning(
-              'Running story %s even though it is disabled because '
-              'it was specifically asked for by name in the --story '
-              'flag.', story.name)
-        return ''
-    if disabled and self._run_disabled_stories:
-      logging.warning(
-          'Force running a disabled story %s even though it was disabled with '
-          'the following reason: %s' % (story.name, disabled))
+    disabled_reason = self._expectations.IsStoryDisabled(story)
+    if not disabled_reason:
       return ''
-    return disabled
+
+    is_explicitly_named = self._stories and story.name in self._stories
+    is_enabled_by_flag = self._run_disabled_stories
+    if should_log:
+      if is_explicitly_named:
+        logging.warning(
+            'Running story %s even though it is disabled because '
+            'it was specifically asked for by name in the --story '
+            'flag.', story.name)
+      elif is_enabled_by_flag:
+        logging.warning(
+            'Force running a disabled story %s even though it was disabled '
+            'with the following reason: %s', story.name, disabled_reason)
+
+    if is_explicitly_named or is_enabled_by_flag:
+      return ''
+    return disabled_reason
 
   def _GetSelectedIndexes(self, length):
     indexes = []

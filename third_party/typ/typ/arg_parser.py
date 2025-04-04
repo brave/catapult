@@ -40,6 +40,37 @@ class ArgumentParser(argparse.ArgumentParser):
         group.add_options(optlist)
         parser.add_option_group(group)
 
+    @staticmethod
+    def add_arguments_to_parser(parser, discovery=False, running=False,
+                                reporting=False, skip=None):
+        # TODO(crbug.com/40807291): Remove or refactor this once Telemetry is off
+        # optparse.
+        ap = ArgumentParser(add_help=False, version=False, discovery=discovery,
+                            running=running, reporting=reporting)
+        # This logic is very similar to optparse_actions(), but not tied to
+        # optparse.
+        skip = skip or []
+        for action in ap._actions:
+            args = [flag for flag in action.option_strings if flag not in skip]
+            if not args or action.help == argparse.SUPPRESS:
+                # This is either a positional arg or an option we want to skip
+                # anyways.
+                continue
+            kwargs = {
+                'default': action.default,
+                'dest': action.dest,
+                'help': action.help,
+                'metavar': action.metavar,
+                'type': action.type,
+                'action': _action_str(action),
+            }
+            # add_argument seems to complain if any kwargs with None values are
+            # passed in, so remove those now.
+            for k, v in list(kwargs.items()):
+                if v is None:
+                    del kwargs[k]
+            parser.add_argument(*args, **kwargs)
+
     def __init__(self, host=None, add_help=True, version=True, discovery=True,
                  reporting=True, running=True):
         super(ArgumentParser, self).__init__(prog='typ', add_help=add_help)
@@ -79,6 +110,9 @@ class ArgumentParser(argparse.ArgumentParser):
             self.add_argument('-c', '--coverage', action='store_true',
                               help=('Reports coverage information. This is '
                                     'disabled when a test filter is used.'))
+            self.add_argument('--coverage-config-file', action='store',
+                              help=('Path to a config file for the coverage '
+                                    'module'))
             self.add_argument('--coverage-source', action='append',
                               default=[],
                               help=('Directories to include when running and '
@@ -240,6 +274,12 @@ class ArgumentParser(argparse.ArgumentParser):
                               default=False,
                               help=('Use the older, single/global process pool '
                                     'approach instead of the scoped approach.'))
+            self.add_argument('--chromium-build-directory', action='store',
+                              help=('Path to a Chromium build. Exposed as '
+                                    'CHROMIUM_BUILD_DIRECTORY in the test '
+                                    'environment.'))
+            self.add_argument('--starting-directory', action='store',
+                              help='Directory to start execution from')
 
         if discovery or running:
             self.add_argument('-P', '--path', action='append', default=[],

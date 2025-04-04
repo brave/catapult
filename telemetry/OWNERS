@@ -16,7 +16,10 @@ khokhlov@google.com
 achuith@chromium.org
 
 # For CrOS OOBE-related changes.
-rsorokin@chromium.org
+dkuzmin@google.com
+
+# For Android-related changes.
+wnwen@chromium.org
 
 # emeritus:
 # aiolos@chromium.org
@@ -32,3 +35,4 @@ rsorokin@chromium.org
 # zhenw@chromium.org
 # nednguyen@google.com
 # perezju@chromium.org
+# rsorokin@chromium.org

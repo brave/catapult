@@ -7,13 +7,12 @@ import collections
 import os
 import unittest
 
-from devil import devil_env
+from unittest import mock
+
 from devil.android import apk_helper
 from devil.android.ndk import abis
 from devil.utils import mock_calls
 
-with devil_env.SysPath(devil_env.PYMOCK_PATH):
-  import mock  # pylint: disable=import-error
 
 # pylint: disable=line-too-long
 _MANIFEST_DUMP = """N: android=http://schemas.android.com/apk/res/android
@@ -402,7 +401,7 @@ class ApkHelperTest(mock_calls.TestCase):
         (mock.call.tempfile.mkdtemp(),
          '/tmp'),
         (mock.call.devil.android.sdk.bundletool.ExtractApks(
-            '/tmp', 'abc.apks', ['arm64-v8a', 'armeabi-v7a'], [('en', 'US')],
+            '/tmp', 'abc.apks', ['arm64-v8a', 'armeabi-v7a'], ['en'],
             ['android.hardware.wifi', 'android.hardware.nfc'], 500, 28, None)),
         (mock.call.os.listdir('/tmp'), ['base-master.apk', 'foo-master.apk']),
         (mock.call.shutil.rmtree('/tmp')),
@@ -417,7 +416,7 @@ class ApkHelperTest(mock_calls.TestCase):
         (mock.call.tempfile.mkdtemp(),
          '/tmp'),
         (mock.call.devil.android.sdk.bundletool.ExtractApks(
-            '/tmp', 'abc.apks', ['arm64-v8a', 'armeabi-v7a'], [('en', 'US')],
+            '/tmp', 'abc.apks', ['arm64-v8a', 'armeabi-v7a'], ['en'],
             ['android.hardware.wifi', 'android.hardware.nfc'], 500, 28,
             ['bar'])),
         (mock.call.os.listdir('/tmp'),
@@ -436,22 +435,17 @@ class ApkHelperTest(mock_calls.TestCase):
          '/tmp'),
         (mock.call.devil.android.sdk.bundletool.ExtractApks(
             '/tmp', 'abc.apks', ['arm64-v8a', 'armeabi-v7a'],
-            [('en', 'US'), ('es', 'ES'), ('fr', 'CA')],
+            ['en', 'es', 'fr'],
             ['android.hardware.wifi', 'android.hardware.nfc'], 500, 28, None)),
         (mock.call.os.listdir('/tmp'),
          ['base-master.apk', 'base-es.apk', 'base-fr.apk']),
         (mock.call.shutil.rmtree('/tmp')),
     ),\
         apk.GetApkPaths(_MockDeviceUtils(),
-                        additional_locales=['es-ES', 'fr-CA']) as apk_paths:
+                        additional_locales=['es', 'fr']) as apk_paths:
       self.assertEqual(
           apk_paths,
           ['/tmp/base-master.apk', '/tmp/base-es.apk', '/tmp/base-fr.apk'])
-
-  def testGetSplitsApksWithAdditionalLocalesIncorrectFormat(self):
-    apk = apk_helper.ToHelper('abc.apks')
-    with self.assertRaises(apk_helper.ApkHelperError):
-      apk.GetApkPaths(_MockDeviceUtils(), additional_locales=['es'])
 
   def testGetSplitsSplitApk(self):
     apk = apk_helper.ToSplitHelper('base.apk',
@@ -476,7 +470,7 @@ class ApkHelperTest(mock_calls.TestCase):
         (mock.call.tempfile.mkdtemp(), '/tmp2'),
         (mock.call.devil.android.sdk.bundletool.ExtractApks(
             '/tmp2', '/tmp/abc.apks', ['arm64-v8a', 'armeabi-v7a'],
-            [('en', 'US')], ['android.hardware.wifi', 'android.hardware.nfc'],
+            ['en'], ['android.hardware.wifi', 'android.hardware.nfc'],
             500, 28, ['bar'])),
         (mock.call.os.listdir('/tmp2'), ['base-master.apk', 'bar-master.apk']),
         (mock.call.os.path.isfile('/tmp/abc.apks'), True),

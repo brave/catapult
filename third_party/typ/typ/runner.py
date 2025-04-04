@@ -163,6 +163,10 @@ class Runner(object):
         self.metadata = {}
         self.path_delimiter = json_results.DEFAULT_TEST_SEPARATOR
         self.artifact_output_dir = None
+        self.tag_conflict_checker = None
+        self.original_cwd = self.host.getcwd()
+        self.starting_directory = None
+        self.chromium_build_directory = None
 
         # initialize self.args to the defaults.
         parser = ArgumentParser(self.host)
@@ -173,6 +177,47 @@ class Runner(object):
         self.parse_args(parser, argv, **defaults)
         if parser.exit_status is not None:
             return parser.exit_status
+
+        if self.args.chromium_build_directory:
+            self.chromium_build_directory = self.host.abspath(
+                self.args.chromium_build_directory
+            )
+
+        # Note that we check the build directory *before* we switch
+        # to the starting directory. This means that if the build
+        # directory is a relative path, it needs to be relative to where
+        # we originally start.
+        if self.chromium_build_directory:
+            if not self.host.exists(self.chromium_build_directory):
+                self.print_('Error: Chromium build directory "%s" does not '
+                            'exist.' % self.chromium_build_directory)
+                return 1
+            if not self.host.isdir(self.chromium_build_directory):
+                self.print_('Error: Chromium build directory arg "%s" does '
+                            'not point to a directory.' %
+                            self.chromium_build_directory)
+                return 1
+
+            self.host.env['CHROMIUM_BUILD_DIRECTORY'] = (
+                self.host.abspath(self.chromium_build_directory)
+            )
+
+        if self.args.starting_directory:
+            self.starting_directory = self.host.abspath(
+                self.args.starting_directory
+            )
+
+        if self.starting_directory:
+            if not self.host.exists(self.starting_directory):
+                self.print_('Error: starting directory "%s" does not exist' %
+                            self.starting_directory)
+                return 1
+            if not self.host.isdir(self.starting_directory):
+                self.print_('Error: starting directory arg "%s" does not '
+                            'point to a directory.' %
+                            self.starting_directory)
+                return 1
+            self.host.chdir(self.starting_directory)
 
         try:
             ret, _, _ = self.run()
@@ -196,13 +241,15 @@ class Runner(object):
         self.host.print_(msg, end, stream=stream)
 
     def run(self, test_set=None):
-
         ret = 0
         h = self.host
 
         if self.args.version:
             self.print_(VERSION)
             return ret, None, None
+
+        if self.args.coverage_config_file:
+            h.env['COVERAGE_RCFILE'] = self.args.coverage_config_file
 
         if self.args.write_full_results_to:
             self.artifact_output_dir = os.path.join(
@@ -356,7 +403,8 @@ class Runner(object):
             self.args.write_full_results_to = fp.name
 
         argv = ArgumentParser(h).argv_from_args(self.args)
-        ret = h.call_inline([h.python_interpreter, path_to_file] + argv)
+        ret = h.call_inline([h.python_interpreter, path_to_file] + argv,
+                            env=self.host.env, cwd=self.original_cwd)
 
         trace = self._read_and_delete(self.args.write_trace_to,
                                       should_delete_trace)
@@ -446,7 +494,8 @@ class Runner(object):
 
         expectations = TestExpectations(set(args.tags), args.ignored_tags)
         err, msg = expectations.parse_tagged_list(
-            contents, args.expectations_files[0])
+            contents, args.expectations_files[0],
+            tags_conflict=self.tag_conflict_checker)
         if err:
             self.print_(msg, stream=self.host.stderr)
             return err
@@ -767,11 +816,25 @@ class Runner(object):
         elif result.actual == ResultType.Failure:
             result_str += ' as expected'
 
+        # Include any associated bugs from relevant expectations if the test:
+        #   1. Was skipped
+        #   2. Failed as expected
+        #   3. Unexpectedly passed
+        bug_str = ''
+        expectedly_skipped_or_failed = (not result.unexpected and
+                                        result.actual != ResultType.Pass)
+        unexpectedly_passed = (result.unexpected and
+                               result.actual == ResultType.Pass)
+        if expectedly_skipped_or_failed or unexpectedly_passed:
+            if result.associated_bugs:
+                bug_str = f' ({result.associated_bugs})'
+
         if self.args.timing:
             timing_str = ' %.4fs' % result.took
         else:
             timing_str = ''
-        suffix = '%s%s' % (result_str, timing_str)
+        worker_str = ' (worker %d)' % result.worker
+        suffix = '%s%s%s%s' % (result_str, bug_str, timing_str, worker_str)
         out = result.out
         err = result.err
         if result.is_regression:
@@ -1029,6 +1092,8 @@ class _Child(object):
         self.disable_resultsink = parent.args.disable_resultsink
         self.result_sink_output_file = parent.args.rdb_content_output_file
         self.jobs = parent.args.jobs
+        self.starting_directory = parent.starting_directory
+        self.chromium_build_directory = parent.chromium_build_directory
 
     def expectations_for(self, test_case):
         expectations = self.expectations if self.has_expectations else None
@@ -1074,14 +1139,17 @@ def _teardown_process(child):
 
 
 def _run_one_test(child, test_input):
-    def _get_expected_results_and_retry_on_failure():
+    def _get_expectation_information():
         if child.has_expectations:
             expectation = child.expectations.expectations_for(test_name)
-            expected_results, should_retry_on_failure = (
-                expectation.results, expectation.should_retry_on_failure)
+            expected_results = expectation.results
+            should_retry_on_failure = expectation.should_retry_on_failure
+            associated_bugs = expectation.reason
         else:
-            expected_results, should_retry_on_failure = {ResultType.Pass}, False
-        return expected_results, should_retry_on_failure
+            expected_results = {ResultType.Pass}
+            should_retry_on_failure = False
+            associated_bugs = ''
+        return expected_results, should_retry_on_failure, associated_bugs
 
     h = child.host
     pid = h.getpid()
@@ -1098,7 +1166,8 @@ def _run_one_test(child, test_input):
     # but could come up when testing non-typ code as well.
     h.capture_output(divert=not child.passthrough)
     (expected_results,
-        should_retry_on_failure) = _get_expected_results_and_retry_on_failure()
+        should_retry_on_failure,
+        associated_bugs) = _get_expectation_information()
     ex_str = ''
     try:
         orig_skip = unittest.skip
@@ -1110,7 +1179,8 @@ def _run_one_test(child, test_input):
             h.restore_output()
             return (Result(test_name, ResultType.Skip, started, 0,
                            child.worker_num, expected=expected_results,
-                           unexpected=False, pid=pid), False)
+                           unexpected=False, pid=pid,
+                           associated_bugs=associated_bugs), False)
 
         test_name_to_load = child.test_name_prefix + test_name
         try:
@@ -1161,6 +1231,7 @@ def _run_one_test(child, test_input):
         test_case.child = child
         test_case.context = child.context_after_setup
         test_case.set_artifacts(art)
+        test_case.chromium_build_directory = child.chromium_build_directory
 
     test_result = unittest.TestResult()
     out = ''
@@ -1183,7 +1254,8 @@ def _run_one_test(child, test_input):
     # the test changed something, e.g. restarted the browser with new browser
     # arguments, leading to different tags being generated.
     (expected_results,
-        should_retry_on_failure) = _get_expected_results_and_retry_on_failure()
+        should_retry_on_failure,
+        associated_bugs) = _get_expectation_information()
 
     took = h.time() - started
     additional_tags = None
@@ -1206,9 +1278,12 @@ def _run_one_test(child, test_input):
         # Handle the case where the test called self.skipTest, e.g. if it
         # determined that the test is not valid on the current configuration.
         if test_result.skipped and test_case.programmaticSkipIsExpected:
+            if test_case.shouldNotOutputAssociatedBugs:
+                associated_bugs = ''
             result = Result(test_name, ResultType.Skip, started, took,
                            child.worker_num, expected={ResultType.Skip},
-                           unexpected=False, pid=pid)
+                           unexpected=False, pid=pid,
+                           associated_bugs=associated_bugs)
             result.result_sink_retcode =\
                     child.result_sink_reporter.report_individual_test_result(
                         result, child.artifact_output_dir, child.expectations,
@@ -1220,7 +1295,8 @@ def _run_one_test(child, test_input):
     result = _result_from_test_result(test_result, test_name, started, took, out,
                                     err, child.worker_num, pid, test_case,
                                     expected_results, child.has_expectations,
-                                    art.artifacts)
+                                    art.artifacts, art.in_memory_text_artifacts,
+                                    associated_bugs)
     result.result_sink_retcode =\
             child.result_sink_reporter.report_individual_test_result(
                 result, child.artifact_output_dir, child.expectations,
@@ -1242,7 +1318,9 @@ def _run_under_debugger(host, test_case, suite,
 
 def _result_from_test_result(test_result, test_name, started, took, out, err,
                              worker_num, pid, test_case, expected_results,
-                             has_expectations, artifacts):
+                             has_expectations, artifacts,
+                             in_memory_text_artifacts,
+                             associated_bugs):
     failure_reason = None
     if test_result.failures:
         actual = ResultType.Failure
@@ -1290,7 +1368,8 @@ def _result_from_test_result(test_result, test_name, started, took, out, err,
     line_number = inspect.getsourcelines(test_func)[1]
     return Result(test_name, actual, started, took, worker_num,
                   expected_results, unexpected, flaky, code, out, err, pid,
-                  file_path, line_number, artifacts, failure_reason)
+                  file_path, line_number, artifacts, in_memory_text_artifacts,
+                  failure_reason, associated_bugs)
 
 
 def _failure_reason_from_traceback(traceback):

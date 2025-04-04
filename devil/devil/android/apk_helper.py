@@ -192,13 +192,6 @@ def _ParseNumericKey(obj, key, default=0):
   return int(val, 0)
 
 
-def _SplitLocaleString(locale):
-  split_locale = locale.split('-')
-  if len(split_locale) != 2:
-    raise ApkHelperError('Locale has incorrect format: {}'.format(locale))
-  return tuple(split_locale)
-
-
 class _ExportedActivity(object):
   def __init__(self, name):
     self.name = name
@@ -338,6 +331,15 @@ class BaseApkHelper(object):
     try:
       application = manifest_info['manifest'][0]['application'][0]
       return int(application['static-library'][0]['android:version'], 16)
+    except KeyError:
+      return None
+
+  def Get32BitAbiOverride(self):
+    """Returns the value of android:use32bitAbi or None if not available."""
+    manifest_info = self._GetManifest()
+    try:
+      application = manifest_info['manifest'][0]['application'][0]
+      return application.get('android:use32bitAbi')
     except KeyError:
       return None
 
@@ -610,9 +612,9 @@ class BaseBundleHelper(BaseApkHelper):
                   modules=None,
                   allow_cached_props=False,
                   additional_locales=None):
-    locales = [device.GetLocale()]
+    locales = [device.GetLocale()[0]]
     if additional_locales:
-      locales.extend(_SplitLocaleString(l) for l in additional_locales)
+      locales.extend(additional_locales)
     with self._GetApksPath() as apks_path:
       try:
         split_dir = tempfile.mkdtemp()

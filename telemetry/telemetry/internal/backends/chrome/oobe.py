@@ -100,20 +100,34 @@ class Oobe(web_contents.WebContents):
     # TODO(achuith): Get rid of this call. crbug.com/804216.
     self._ExecuteOobeApi('OobeAPI.skipToLoginForTesting')
     if for_user_triggered_enrollment:
-      self._ExecuteOobeApi('Oobe.switchToEnterpriseEnrollmentForTesting')
+      self._ExecuteOobeApi('OobeAPI.advanceToScreen', 'enterprise-enrollment')
 
     url = self.EvaluateJavaScript("window.location.href")
     if url.startswith('chrome://oobe/gaia-signin'):
-      self.ExecuteJavaScript('Oobe.showAddUserForTesting()')
+      self._ExecuteOobeApi('OobeAPI.showGaiaDialog')
+
+      # If the user creation screen asks whether to add an account for "You" or
+      # "A child", click the for "You" option and then click the "Next" button.
+      self.ExecuteJavaScript("""
+        // This screen isn't always shown, so don't fail if it's missing.
+        const elem = document.querySelector('user-creation-element');
+        if (elem && elem.shadowRoot) {
+          const selfSignInButton = elem.shadowRoot.getElementById('selfButton');
+          if (!selfSignInButton) {
+            throw new Error('For personal use cr-button not found');
+          }
+          selfSignInButton.click();
+          const nextButton = elem.shadowRoot.querySelector('oobe-next-button');
+          if (!nextButton) {
+            throw new Error('Next button not found');
+          }
+          nextButton.click();
+        }
+        """)
 
     py_utils.WaitFor(self._GaiaWebviewContext, 20)
     self._NavigateWebviewLogin(username, password,
                                wait_for_close=not enterprise_enroll)
-
-    if enterprise_enroll:
-      self.WaitForJavaScriptCondition(
-          'Oobe.isEnrollmentSuccessfulForTest()', timeout=120)
-      self._ExecuteOobeApi('Oobe.enterpriseEnrollmentDone')
 
   def _UnicornObfuscated(self, text):
     """Converts an email into an obfuscated email.

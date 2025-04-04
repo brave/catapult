@@ -16,6 +16,10 @@ import google_auth_httplib2
 
 TOKEN_INFO_ENDPOINT = 'https://oauth2.googleapis.com/tokeninfo'
 EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
+PROD_SERVICE_ACCOUNT = 'chromeperf@appspot.gserviceaccount.com'
+STAGING_SERVICE_ACCOUNT = 'chromeperf-stage@appspot.gserviceaccount.com'
+# pylint: disable=line-too-long
+PINPOINT_SKIA_SERVICE_ACCOUNT = 'pinpoint-worker@skia-infra-public.iam.gserviceaccount.com'
 
 _STAGING_APP_ID = 'chromeperf-stage'
 
@@ -24,10 +28,16 @@ def IsStagingEnvironment():
   return os.environ.get('GOOGLE_CLOUD_PROJECT') == _STAGING_APP_ID
 
 
+def ServiceAccount():
+  if IsStagingEnvironment():
+    return STAGING_SERVICE_ACCOUNT
+  return PROD_SERVICE_ACCOUNT
+
+
 def AllowList():
   if IsStagingEnvironment():
-    return {'chromeperf-stage@appspot.gserviceaccount.com'}
-  return {'chromeperf@appspot.gserviceaccount.com'}
+    return {STAGING_SERVICE_ACCOUNT}
+  return {PROD_SERVICE_ACCOUNT}
 
 
 def ServiceAccountHttp(scope=EMAIL_SCOPE, timeout=None):
@@ -88,7 +98,7 @@ def AuthorizeBearerToken(request):
 def BearerTokenAuthorizer(wrapped_handler):
   @functools.wraps(wrapped_handler)
   def Wrapper(*args, **kwargs):
-    if not AuthorizeBearerToken(flask_request):
+    if not IsStagingEnvironment() and not AuthorizeBearerToken(flask_request):
       return make_response('Failed to validate the incoming request.', 403)
     return wrapped_handler(*args, **kwargs)
 

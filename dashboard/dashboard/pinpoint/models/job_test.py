@@ -8,7 +8,7 @@ from __future__ import absolute_import
 
 import datetime
 from flask import Flask
-import mock
+from unittest import mock
 import sys
 
 from tracing.value.diagnostics import generic_set
@@ -57,7 +57,7 @@ https://testbed.example.com/job/1
 
 Error string""")
 
-_COMMENT_CODE_REVIEW = (u"""\U0001f4cd Job complete.
+_COMMENT_GERRIT_UPDATE = (u"""\U0001f4cd Job %s/%s complete.
 
 See results at: https://testbed.example.com/job/1""")
 
@@ -149,10 +149,12 @@ class JobTest(test.TestCase):
                     bug_id=123456)
     c1 = change.Change((change.Commit('chromium', 'test_git_hash1'),))
     c2 = change.Change((change.Commit('chromium', 'test_git_hash2'),))
-    request = j._CreateWorkflowExecutionRequest(c1, c2)
+    improvement_dir = 'UP'
+    request = j._CreateWorkflowExecutionRequest(c1, c2, improvement_dir)
     self.assertEqual(request['start_git_hash'], 'test_git_hash1')
     self.assertEqual(request['end_git_hash'], 'test_git_hash2')
     self.assertEqual(request['target'], 'webrtc_perf_tests')
+    self.assertEqual(request['improvement_dir'], improvement_dir)
 
   @mock.patch('dashboard.services.perf_issue_service_client.GetIssue')
   def testCanSandwich(self, get_issue):
@@ -1325,14 +1327,21 @@ class BugCommentTest(test.TestCase):
 
   @mock.patch('dashboard.services.gerrit_service.PostChangeComment')
   def testCompletedUpdatesGerrit(self, post_change_comment):
+    expected_bot = 'linux-perf'
+    expected_benchmark = 'speedometer2'
     j = job.Job.New((), (),
+                    arguments={
+                        'configuration': expected_bot,
+                        'benchmark': expected_benchmark,
+                    },
                     gerrit_server='https://review.com',
                     gerrit_change_id='123456')
     scheduler.Schedule(j)
     j.Run()
     self.ExecuteDeferredTasks('default')
-    post_change_comment.assert_called_once_with('https://review.com', '123456',
-                                                _COMMENT_CODE_REVIEW)
+    post_change_comment.assert_called_once_with(
+        'https://review.com', '123456',
+        _COMMENT_GERRIT_UPDATE % (expected_bot, expected_benchmark))
 
 @mock.patch('dashboard.services.swarming.GetAliveBotsByDimensions',
             mock.MagicMock(return_value=["a"]))
@@ -1368,18 +1377,10 @@ class GetIterationCountTest(test.TestCase):
 
   def testEvenlyDivisibleBots(self):
     self.assertEqual(
-        job.GetIterationCount(initial_attempt_count=6, bot_count=6), 6)
+        job.GetIterationCount(initial_attempt_count=6), 6)
     self.assertEqual(
-        job.GetIterationCount(initial_attempt_count=12, bot_count=6), 12)
+        job.GetIterationCount(initial_attempt_count=12), 12)
 
   def testOddAttemptCount(self):
     self.assertEqual(
-        job.GetIterationCount(initial_attempt_count=5, bot_count=6), 6)
-
-  def testMoreBots(self):
-    self.assertEqual(
-        job.GetIterationCount(initial_attempt_count=5, bot_count=17), 6)
-
-  def testLessBots(self):
-    self.assertEqual(
-        job.GetIterationCount(initial_attempt_count=10, bot_count=7), 14)
+        job.GetIterationCount(initial_attempt_count=5), 6)

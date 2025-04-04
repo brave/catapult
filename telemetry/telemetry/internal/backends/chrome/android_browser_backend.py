@@ -99,21 +99,40 @@ class AndroidBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
     assert not startup_args, (
         'Startup arguments for Android should be set during '
         'possible_browser.SetUpEnvironment')
+    # If another Chrome browser is open, devtools can end up connecting to the
+    # wrong instance since `localabstract:chrome_devtools_remote` will be bound
+    # to the first instance that was opened. Stop all such browsers now to avoid
+    # that. This is not an issue in dedicated test environments, but is likely
+    # to be hit if testing is done on a personal device where stable Chrome is
+    # likely to be open.
+    self._StopAllChromeBrowsers()
     self._dump_finder = minidump_finder.MinidumpFinder(
         self.browser.platform.GetOSName(), self.browser.platform.GetArchName())
     user_agent_dict = user_agent.GetChromeUserAgentDictFromType(
         self.browser_options.browser_user_agent_type)
-    self.device.StartActivity(
-        intent.Intent(package=self.browser_package,
-                      activity=self._backend_settings.activity,
-                      action=None, data='about:blank', category=None,
-                      extras=user_agent_dict),
-        blocking=True)
+    activity = self._backend_settings.GetActivityNameForSdk(
+        self.platform_backend.device.build_version_sdk)
+    action = self._backend_settings.GetActionForSdk(
+        self.platform_backend.device.build_version_sdk)
+    self.device.StartActivity(intent.Intent(package=self.browser_package,
+                                            activity=activity,
+                                            action=action,
+                                            data='about:blank',
+                                            category=None,
+                                            extras=user_agent_dict),
+                              blocking=True)
     try:
       self.BindDevToolsClient()
     except:
       self.Close()
       raise
+
+  def _StopAllChromeBrowsers(self):
+    chrome_packages = self.device.ListPackages('chrome')
+    for package in chrome_packages:
+      # Output is prefixed by "package:".
+      package = package.split('package:', maxsplit=1)[-1]
+      self.platform_backend.StopApplication(package)
 
   def BindDevToolsClient(self):
     super().BindDevToolsClient()
@@ -135,13 +154,16 @@ class AndroidBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
 
   def Foreground(self):
     package = self.browser_package
-    activity = self._backend_settings.activity
-    self.device.StartActivity(
-        intent.Intent(package=package,
-                      activity=activity,
-                      action=None,
-                      flags=[intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED]),
-        blocking=False)
+    activity = self._backend_settings.GetActivityNameForSdk(
+        self.platform_backend.device.build_version_sdk)
+    action = self._backend_settings.GetActionForSdk(
+        self.platform_backend.device.build_version_sdk)
+    self.device.StartActivity(intent.Intent(
+        package=package,
+        activity=activity,
+        action=action,
+        flags=[intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED]),
+                              blocking=False)
     # TODO(crbug.com/601052): The following waits for any UI node for the
     # package launched to appear on the screen. When the referenced bug is
     # fixed, remove this workaround and just switch blocking above to True.

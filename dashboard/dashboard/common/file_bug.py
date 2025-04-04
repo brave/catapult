@@ -303,15 +303,22 @@ def FileBug(owner,
             project_id,
             labels,
             components,
-            urlsafe_keys,
-            needs_bisect=True):
-  alert_keys = [ndb.Key(urlsafe=k) for k in urlsafe_keys]
+            keys,
+            needs_bisect=True,
+            keys_are_urlsafe=True):
+  logging.info('file a bug from legacy chromeperf UI')
+  if keys_are_urlsafe:
+    alert_keys = [ndb.Key(urlsafe=k) for k in keys]
+  else:
+    alert_keys = [ndb.Key('Anomaly', k) for k in keys]
   alerts = ndb.get_multi(alert_keys)
+  logging.info('get alerts finished')
 
   if not description:
     description = 'See the link to graphs below.'
 
   milestone_label = _MilestoneLabel(alerts)
+  logging.info('milestone label obtained')
   if milestone_label:
     labels.append(milestone_label)
 
@@ -323,9 +330,9 @@ def FileBug(owner,
       components=components,
       owner=owner,
       cc=[email for email in cc.split(',') if email.strip()])
-
   if 'error' in new_bug_response:
     return {'error': new_bug_response['error']}
+  logging.info('bug created')
 
   bug_id = new_bug_response['issue_id']
   bug_data.Bug.New(bug_id=bug_id, project=project_id or 'chromium').put()
@@ -335,12 +342,14 @@ def FileBug(owner,
     a.project_id = project_id
 
   ndb.put_multi(alerts)
+  logging.info('bug mapped to alert')
   comment_body = _AdditionalDetails(bug_id, project_id, alerts)
 
   # Add the bug comment with the service account, so that there are no
   # permissions issues.
   perf_issue_service_client.PostIssueComment(
       bug_id, project_id, comment=comment_body)
+  logging.info('bug comment added with the service account')
   template_params = {'bug_id': bug_id, 'project_id': project_id}
   if all(k.kind() == 'Anomaly' for k in alert_keys):
     logging.info('Kicking bisect for bug %s', bug_id)

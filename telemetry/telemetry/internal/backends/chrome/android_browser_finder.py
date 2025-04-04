@@ -5,6 +5,7 @@
 """Finds android browsers that can be started and controlled by telemetry."""
 
 from __future__ import absolute_import
+import argparse
 import contextlib
 import logging
 import os
@@ -22,6 +23,8 @@ from py_utils import file_util
 from py_utils import tempfile_ext
 from telemetry import compat_mode_options
 from telemetry import decorators
+# Alias necessary to avoid name conflicts with `android_platform` variables.
+from telemetry.core import android_platform as android_platform_package
 from telemetry.core import exceptions
 from telemetry.core import platform as telemetry_platform
 from telemetry.core import util
@@ -30,7 +33,7 @@ from telemetry.internal.backends.chrome import android_browser_backend
 from telemetry.internal.backends.chrome import chrome_startup_args
 from telemetry.internal.browser import browser
 from telemetry.internal.browser import possible_browser
-from telemetry.internal.platform import android_device
+from telemetry.internal.platform import android_device, android_platform_backend
 from telemetry.internal.util import binary_manager
 from telemetry.internal.util import format_for_logging
 from telemetry.internal.util import local_first_binary_manager
@@ -77,15 +80,23 @@ def _ProfileWithExtraFiles(profile_dir, profile_files_to_copy):
 class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
   """A launchable android browser instance."""
 
-  def __init__(self, browser_type, finder_options, android_platform,
-               backend_settings, local_apk=None, target_os='android'):
-    super().__init__(
-        browser_type, target_os, backend_settings.supports_tab_control)
+  # TODO(crbug.com/335891661): Replace argparse.Namespace with
+  #                            browser_options.BrowserFinderOptions.
+  def __init__(self,
+               browser_type: str,
+               finder_options: argparse.Namespace,
+               android_platform: android_platform_package.AndroidPlatform,
+               backend_settings: android_browser_backend_settings.
+               AndroidBrowserBackendSettings,
+               local_apk=None,
+               target_os='android'):
+    super().__init__(browser_type, target_os,
+                     backend_settings.supports_tab_control)
     assert browser_type in FindAllBrowserTypes(), (
         'Please add %s to android_browser_finder.FindAllBrowserTypes' %
         browser_type)
     self._platform = android_platform
-    self._platform_backend = (
+    self._platform_backend: android_platform_backend.AndroidPlatformBackend = (
         android_platform._platform_backend)  # pylint: disable=protected-access
     self._backend_settings = backend_settings
     self._local_apk = local_apk
@@ -94,6 +105,7 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     self._compile_apk = finder_options.compile_apk
     self._finder_options = finder_options
     self._browser_package = None
+    self._assume_browser_already_installed = False
 
     if self._local_apk is None and finder_options.chrome_root is not None:
       self._local_apk = self._backend_settings.FindLocalApk(
@@ -107,6 +119,9 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
       self._modules_to_install = set(['base'] +
                                      finder_options.modules_to_install)
 
+    if finder_options.assume_browser_already_installed:
+      self._assume_browser_already_installed = True
+
     self._support_apk_list = []
     if (self._backend_settings.requires_embedder or
         self._backend_settings.has_additional_apk):
@@ -114,7 +129,7 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
         self._support_apk_list = finder_options.webview_embedder_apk
       else:
         self._support_apk_list = self._backend_settings.FindSupportApks(
-            self._local_apk, finder_options.chrome_root)
+            self._local_apk)
     elif finder_options.webview_embedder_apk:
       logging.warning(
           'No embedder needed for %s, ignoring --webview-embedder-apk option',
@@ -174,6 +189,13 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
       return os.path.getmtime(self._local_apk)
     return -1
 
+  def GetActivityForCurrentSdk(self):
+    return self._backend_settings.GetActivityNameForSdk(
+        self.device.build_version_sdk)
+
+  def GetActionForCurrentSdk(self):
+    return self._backend_settings.GetActionForSdk(self.device.build_version_sdk)
+
   def _GetPathsForOsPageCacheFlushing(self):
     return [self.profile_directory, self.browser_directory]
 
@@ -189,9 +211,14 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     # directories.
     profile_files_to_copy = self._browser_options.profile_files_to_copy
     if not self._browser_options.profile_dir and not profile_files_to_copy:
+      permissions = None
+      if self._local_apk:
+        apk = apk_helper.ToHelper(self._local_apk)
+        permissions = apk.GetPermissions()
       self._platform_backend.RemoveProfile(
           self.browser_package,
-          self._backend_settings.profile_ignore_list)
+          self._backend_settings.profile_ignore_list,
+          permissions=permissions)
       return
 
     with _ProfileWithExtraFiles(self._browser_options.profile_dir,
@@ -204,7 +231,12 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     self._platform_backend.DismissCrashDialogIfNeeded()
     device = self._platform_backend.device
     startup_args = self.GetBrowserStartupArgs(self._browser_options)
+    assert device.adb is not None
     device.adb.Logcat(clear=True)
+
+    # Avoids a Chrome android permission dialog, see https://crbug.com/1498208.
+    device.GrantPermissions(self.browser_package,
+                            ['android.permission.POST_NOTIFICATIONS'])
 
     # use legacy commandline path if in compatibility mode
     self._flag_changer = flag_changer.FlagChanger(
@@ -310,53 +342,73 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     """Returns True if the browser is or can be installed on the platform."""
     has_local_apks = self._local_apk and (
         not self._backend_settings.requires_embedder or self._support_apk_list)
-    return has_local_apks or self.platform.CanLaunchApplication(
+    return has_local_apks or self._platform_backend.CanLaunchApplication(
         self.settings.package)
 
   @decorators.Cache
   def UpdateExecutableIfNeeded(self):
+    if self._assume_browser_already_installed:
+      return
+
     # TODO(crbug.com/815133): This logic should belong to backend_settings.
     for apk in self._support_apk_list:
-      logging.warning('Installing %s on device if needed.', apk)
-      self.platform.InstallApplication(apk)
+      logging.warning('Installing support apk (%s) on device if needed.', apk)
+      self._platform_backend.InstallApplication(apk)
 
-    apk_name = self._backend_settings.GetApkName(
-        self._platform_backend.device)
-    is_webview_apk = apk_name is not None and ('SystemWebView' in apk_name or
-                                               'system_webview' in apk_name or
-                                               'TrichromeWebView' in apk_name or
-                                               'trichrome_webview' in apk_name)
-    # The WebView fallback logic prevents sideloaded WebView APKs from being
-    # installed and set as the WebView implementation correctly. Disable the
-    # fallback logic before installing the WebView APK to make sure the fallback
-    # logic doesn't interfere.
-    if is_webview_apk:
-      self._platform_backend.device.SetWebViewFallbackLogic(False)
+    # This may be the case if the apk containing the browser is installed some
+    # other way before telemetry runs (see example in crbug.com/326579345).
+    if not self._local_apk:
+      return
 
-    if self._local_apk:
-      logging.warning('Installing %s on device if needed.', self._local_apk)
-      self.platform.InstallApplication(
-          self._local_apk, modules=self._modules_to_install)
-      if self._compile_apk:
-        package_name = apk_helper.GetPackageName(self._local_apk)
-        logging.warning('Compiling %s.', package_name)
-        self._platform_backend.device.RunShellCommand(
-            ['cmd', 'package', 'compile', '-m', self._compile_apk, '-f',
-             package_name],
-            check_return=True,
-            timeout=120)
+    package_name = apk_helper.GetPackageName(self._local_apk)
+    device = self._platform_backend.device
+    logging.warning('Installing %s on device if needed.', self._local_apk)
+    self._platform_backend.InstallApplication(self._local_apk,
+                                              modules=self._modules_to_install)
+    if self._compile_apk:
+      logging.warning('Compiling %s.', package_name)
+      cmd = [
+          'cmd', 'package', 'compile', '-m', self._compile_apk, '-f',
+          package_name
+      ]
+      device.RunShellCommand(cmd, check_return=True, timeout=120)
 
-    sdk_version = self._platform_backend.device.build_version_sdk
-    # Bundles are in the ../bin directory, so it's safer to just check the
-    # correct name is part of the path.
-    is_monochrome = apk_name is not None and (apk_name == 'Monochrome.apk' or
-                                              'monochrome_bundle' in apk_name)
-    if ((is_webview_apk or
-         (is_monochrome and sdk_version < version_codes.Q)) and
-        sdk_version >= version_codes.NOUGAT):
-      package_name = apk_helper.GetPackageName(self._local_apk)
-      logging.warning('Setting %s as WebView implementation.', package_name)
-      self._platform_backend.device.SetWebViewImplementation(package_name)
+    sdk_version = device.build_version_sdk
+    # We can only switch WebView providers on Android Nougat and above.
+    if sdk_version < version_codes.NOUGAT:
+      return
+
+    apk_name = self._backend_settings.GetApkName(device) or ''
+    if 'webview' in apk_name.lower():
+      # The WebView fallback logic prevents sideloaded WebView APKs from being
+      # installed and set as the WebView implementation. Disable the fallback
+      # logic before installing the WebView APK to make sure the fallback logic
+      # doesn't interfere.
+      device.SetWebViewFallbackLogic(False)
+      should_override_webview_provider = True
+    elif sdk_version >= version_codes.Q:
+      # For Android Q and above, WebView is the only provider that is allowed,
+      # so no other Chrome packages can be set as the WebView implementation.
+      should_override_webview_provider = False
+    elif 'monochrome' in apk_name.lower():
+      # From Android Nougat to Android P, some Chrome packages are also allowed
+      # to be WebView providers. Monochrome is the only Chrome build variant
+      # that can also act as a WebView provider.
+      should_override_webview_provider = True
+    else:
+      should_override_webview_provider = False
+
+    if should_override_webview_provider:
+      # Only a specific set of package names are allowed to be set as the
+      # WebView implementation. Make sure the package name is in the allowlist
+      # before setting it as the WebView implementation.
+      allowed = device.GetWebViewUpdateServiceDump().get('WebViewPackages')
+      if package_name in allowed:
+        logging.warning('Setting %s as WebView implementation.', package_name)
+        device.SetWebViewImplementation(package_name)
+      else:
+        logging.warning('Cannot set %s as WebView implementation, not in %r.',
+                        package_name, allowed)
 
   def GetTypExpectationsTags(self):
     tags = super().GetTypExpectationsTags()
@@ -430,7 +482,11 @@ def _GetReferenceAndroidBrowser(android_platform, finder_options):
   return None
 
 
-def _FindAllPossibleBrowsers(finder_options, android_platform):
+def _FindAllPossibleBrowsers(
+    # TODO(crbug.com/335891661): Replace argparse.Namespace with
+    #                            browser_options.BrowserFinderOptions.
+    finder_options: argparse.Namespace,
+    android_platform: android_platform_package.AndroidPlatform):
   """Testable version of FindAllAvailableBrowsers."""
   if not android_platform:
     return []
@@ -503,7 +559,8 @@ def FindAllAvailableBrowsers(finder_options, device):
   try:
     android_platform = telemetry_platform.GetPlatformForDevice(
         device, finder_options)
-    return _FindAllPossibleBrowsers(finder_options, android_platform)
+    return _FindAllPossibleBrowsers(finder_options,
+                                    android_platform)  # type: ignore
   except base_error.BaseError as e:
     logging.error('Unable to find browsers on %s: %s', device.device_id, str(e))
     ps_output = subprocess.check_output(['ps', '-ef'])

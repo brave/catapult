@@ -86,6 +86,13 @@ DIAGNOSTIC_NAMES_TO_ANNOTATION_NAMES = {
         'a_brave_job_id',
     reserved_infos.BRAVE_TRACE_PATH.name:
         'a_brave_trace_path',
+
+    reserved_infos.FUCHSIA_INTEGRATION_INTERNAL_REVISIONS.name:
+        'r_fuchsia_integ_int_git',
+    reserved_infos.FUCHSIA_INTEGRATION_PUBLIC_REVISIONS.name:
+        'r_fuchsia_integ_pub_git',
+    reserved_infos.FUCHSIA_SMART_INTEGRATION_REVISIONS.name:
+        'r_fuchsia_smart_integ_git',
 }
 
 

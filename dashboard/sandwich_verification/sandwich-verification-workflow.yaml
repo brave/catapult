@@ -4,6 +4,7 @@ main:
     - init:
         assign:
           - anomaly: ${input.anomaly}
+          - execution_id: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
           - version: ${text.replace_all(sys.get_env("GOOGLE_CLOUD_WORKFLOW_ID"),
                 "sandwich-verification-workflow-",
                 "")}
@@ -35,6 +36,7 @@ main:
                   url: ${functionResponse.body.serviceConfig.uri}
                   body:
                     anomaly: ${anomaly}
+                    execution_id: ${execution_id}
                   auth:
                     type: OIDC
                 result: startPinpointJobResult
@@ -63,7 +65,7 @@ main:
                   auth:
                     type: OIDC
                 result: pollPinpointJobResult
-              retry: ${http.default_retry_non_idempotent}
+              retry: ${http.default_retry}
           - assignStatus:
               assign:
                 - status: ${pollPinpointJobResult.body.status}
@@ -101,8 +103,9 @@ main:
                     job_id: ${job_id}
                   auth:
                     type: OIDC
+                  timeout: 600
                 result: getCabeAnalysisResult
-              retry: ${http.default_retry_non_idempotent}
+              retry: ${http.default_retry}
           - assignStatistic:
               assign:
                 - statistic: ${getCabeAnalysisResult.body[anomaly.benchmark][anomaly.measurement]}
@@ -123,7 +126,9 @@ main:
                 args:
                   url: ${functionResponse.body.serviceConfig.uri}
                   body:
+                    anomaly: ${anomaly}
                     statistic: ${statistic}
+                    job_id: ${job_id}
                   auth:
                     type: OIDC
                 result: regressionDetectionResult

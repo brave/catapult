@@ -8,12 +8,10 @@ Unit tests for some APIs with conditional logic in adb_wrapper.py
 
 import unittest
 
-from devil import devil_env
+from unittest import mock
+
 from devil.android import device_errors
 from devil.android.sdk import adb_wrapper
-
-with devil_env.SysPath(devil_env.PYMOCK_PATH):
-  import mock  # pylint: disable=import-error
 
 
 class AdbWrapperTest(unittest.TestCase):
@@ -79,3 +77,34 @@ class AdbWrapperTest(unittest.TestCase):
     ]
     self.assertRaises(device_errors.AdbCommandFailedError, self.adb.Root,
                       retries=0)
+
+  @mock.patch('devil.utils.cmd_helper.GetCmdStatusAndOutputWithTimeout')
+  def testAdbConnectSuccess(self, get_cmd_mock):  # pylint: disable=no-self-use
+    get_cmd_mock.return_value = (0, 'connected to testhost:5555')
+    adb_wrapper.AdbWrapper.Connect('testhost', 5555)
+    get_cmd_mock.assert_called_once_with([mock.ANY, 'connect', 'testhost:5555'],
+                                         adb_wrapper.DEFAULT_TIMEOUT,
+                                         env=mock.ANY)
+
+  @mock.patch('devil.utils.cmd_helper.GetCmdStatusAndOutputWithTimeout')
+  def testAdbConnectReconnect(self, get_cmd_mock):
+    # pylint: disable=no-self-use
+    get_cmd_mock.return_value = (0, 'already connected to testhost:5555')
+    adb_wrapper.AdbWrapper.Connect('testhost', 5555)
+    get_cmd_mock.assert_called_once_with([mock.ANY, 'connect', 'testhost:5555'],
+                                         adb_wrapper.DEFAULT_TIMEOUT,
+                                         env=mock.ANY)
+
+  @mock.patch('devil.utils.cmd_helper.GetCmdStatusAndOutputWithTimeout')
+  def testAdbConnect_failure(self, get_cmd_mock):
+    with self.assertLogs(logger='devil.android.sdk.adb_wrapper',
+                         level='WARNING') as log_results:
+      get_cmd_mock.return_value = (
+          0, 'failed to connect to testhost:5555: Connection refused')
+      adb_wrapper.AdbWrapper.Connect('testhost', 5555)
+      get_cmd_mock.assert_called_once_with(
+          [mock.ANY, 'connect', 'testhost:5555'],
+          adb_wrapper.DEFAULT_TIMEOUT,
+          env=mock.ANY)
+      self.assertIn('adb connect to testhost:5555 may have failed',
+                    log_results.output[0])

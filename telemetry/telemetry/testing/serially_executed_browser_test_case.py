@@ -109,8 +109,9 @@ class SeriallyExecutedBrowserTestCase(test_case.TestCase):
           browser_options.browser_options.wpr_mode)
     else:
       assert cls.platform == cls._browser_to_create.platform, (
-          'All browser launches within same test suite must use browsers on '
-          'the same platform')
+          f'All browser launches within same test suite must use browsers on '
+          f'the same platform ({cls.platform} vs '
+          f'{cls._browser_to_create.platform})')
 
   @classmethod
   def StartWPRServer(cls, archive_path=None, archive_bucket=None):
@@ -252,6 +253,18 @@ class SeriallyExecutedBrowserTestCase(test_case.TestCase):
     A list of tags derived from the Browser instance's platform member variable.
     """
     return browser.GetTypExpectationsTags()
+
+  @classmethod
+  def GetTagConflictChecker(cls):
+    """Gets the non-standard tag checking function to use.
+
+    Passed on to typ for use when parsing expectation files. The default value
+    of None will cause the default conflict checker to be used.
+
+    If overridden, the returned callable should take two tags as strings and
+    return a boolean indicating whether the two tags conflict or not.
+    """
+    return None
 
   @staticmethod
   def GetJSONResultsDelimiter():

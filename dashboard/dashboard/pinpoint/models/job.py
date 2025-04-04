@@ -46,7 +46,7 @@ from dashboard.services import workflow_service
 
 
 # We want this to be fast to minimize overhead while waiting for tasks to
-# finish, but don't want to consume too many resources.
+# finish but don't want to consume too many resources.
 _TASK_INTERVAL = 60
 
 _CRYING_CAT_FACE = u'\U0001f63f'
@@ -76,12 +76,17 @@ page for details.""")
 def JobFromId(job_id):
   """Get a Job object from its ID.
 
-  Its ID is just its key as a hex string.
+  The ID is just its key as a hex string.
 
   Users of Job should not have to import ndb. This function maintains an
   abstraction layer that separates users from the Datastore details.
   """
-  job_key = ndb.Key('Job', int(job_id, 16))
+  try:
+    uuid_id = uuid.UUID(job_id)
+    job_key = ndb.Key('Job', str(uuid_id))
+  except ValueError:
+    # not a uuid meaning it didn't come from skia, so parse normally
+    job_key = ndb.Key('Job', int(job_id, 16))
   return job_key.get()
 
 
@@ -177,10 +182,8 @@ def IsRunning(job):
 
 
 
-def GetIterationCount(initial_attempt_count, bot_count):
+def GetIterationCount(initial_attempt_count):
   # We want to run at least initial_attempt_count iterations.
-  # In addition, attempts should be evenly distributed between all bots.
-  # bot_count will never be 0 (we'll exception out if that happens).
 
   # Bisections determine attempt count elsewhere.
   if initial_attempt_count is None:
@@ -190,13 +193,7 @@ def GetIterationCount(initial_attempt_count, bot_count):
   if initial_attempt_count % 2:
     initial_attempt_count += 1
 
-  if bot_count >= initial_attempt_count:
-    return initial_attempt_count
-
-  repeats = initial_attempt_count // bot_count
-  if repeats * bot_count < initial_attempt_count:
-    repeats += 1
-  return repeats * bot_count
+  return initial_attempt_count
 
 
 class Job(ndb.Model):
@@ -362,6 +359,7 @@ class Job(ndb.Model):
       A Job object.
     """
     bots = swarming.GetAliveBotsByDimensions(dimensions, swarming_server)
+    logging.debug('Alive bots loaded by swarming v2: %s', bots)
     if not bots:
       raise errors.SwarmingNoBots()
 
@@ -374,8 +372,7 @@ class Job(ndb.Model):
         comparison_mode=comparison_mode,
         comparison_magnitude=comparison_magnitude,
         pin=pin,
-        initial_attempt_count=GetIterationCount(initial_attempt_count,
-                                                len(bots)))
+        initial_attempt_count=GetIterationCount(initial_attempt_count))
     args = arguments or {}
     job = cls(
         state=state,
@@ -436,6 +433,8 @@ class Job(ndb.Model):
 
   @property
   def job_id(self):
+    if isinstance(self.key.id(), str):
+      return self.key.id()
     return '%x' % self.key.id()
 
   @property
@@ -540,8 +539,10 @@ class Job(ndb.Model):
     pinpoint_job_queued_time = self.started_time - self.created
 
     cloud_metric.PublishPinpointJobRunTimeMetric(
-        app_identity.get_application_id(), self.job_id, self.comparison_mode,
-        "wait-time-in-queue", self.user, self.origin,
+        app_identity.get_application_id(), self.job_id,
+        self.comparison_mode, "wait-time-in-queue", self.user, self.origin,
+        GetJobTypeByName(self.name), self.configuration,
+        self.benchmark_arguments.benchmark, self.benchmark_arguments.story,
         pinpoint_job_queued_time.total_seconds())
 
     title = _ROUND_PUSHPIN + ' Pinpoint job started.'
@@ -603,9 +604,13 @@ class Job(ndb.Model):
       git_hash = change.commits[0].git_hash
     return git_hash
 
-  def _CreateWorkflowExecutionRequest(self, change_a, change_b):
+  def _CreateWorkflowExecutionRequest(self, change_a, change_b,
+                                      improvement_dir):
     start_git_hash = self._GetGitHash(change_a)
     end_git_hash = self._GetGitHash(change_b)
+    logging.debug(
+        ('Pinpoint - job %s creating verification workflow with improvement '
+         'direction %s'), self.job_id, improvement_dir)
 
     if not start_git_hash or not end_git_hash:
       raise ValueError('start_git_hash (%s) or end_git_hash (%s) is None' \
@@ -629,11 +634,23 @@ class Job(ndb.Model):
             end_git_hash,
         'project':
             self.project,
+        'improvement_dir':
+            improvement_dir,
     }
 
-  def _CanSandwich(self):
+  def _CanSandwich(self, differences=None):
     if not self.user or 'appspot.gserviceaccount.com' not in self.user:
       return False
+    # When a culprit is a non-chromium CL, culprit verification will use the
+    # first commit in the roll, which sets up an A/A experiment. Any culprit CL
+    # that is part of a roll will fail to verify. This issue occurs about 30% of
+    # the time.
+    # TODO(crbug/1507128): Re-enable culprit verification for
+    # non-chromium culprits.
+    if differences:
+      for _, change_b in differences:
+        if change_b.last_commit.repository != "chromium":
+          return False
     sandwich_subscription = ''
     if self.bug_id:
       issue = perf_issue_service_client.GetIssue(self.bug_id, self.project)
@@ -688,7 +705,7 @@ class Job(ndb.Model):
       regression_cnt += 1
       # Call sandwich verification workflow.
       wf_execution_request = self._CreateWorkflowExecutionRequest(
-          change_a, change_b)
+          change_a, change_b, workflow_group.improvement_dir)
       execution_name = workflow_service.CreateExecution(wf_execution_request)
       cloud_workflow = sandwich_workflow_group.CloudWorkflow(
           execution_name=execution_name,
@@ -786,7 +803,7 @@ class Job(ndb.Model):
 
     # If the job is CABE-compatible:
     # call verification workflow for each difference.
-    if self._CanSandwich():
+    if self._CanSandwich(differences):
       regression_cnt, wf_executions = self._StartSandwichAndUpdateWorkflowGroup(
           improvement_dir, differences, result_values)
       if regression_cnt == 0:
@@ -801,10 +818,11 @@ class Job(ndb.Model):
             status='WontFix',
             _retry_options=RETRY_OPTIONS)
       else:
-        title1 = "<b>%s %s %s regressions found.</b>" % (_ROUND_PUSHPIN, _SANDWICH,
-                                                      regression_cnt)
+        title1 = ("<b>%s %s %s regressions found.</b>" %
+                  (_ROUND_PUSHPIN, _SANDWICH, regression_cnt))
         title2 = "<b>Started sandwich culprit verification process.</b>"
-        workflow_details = "culprit verification workflow keys: %s" % (wf_executions)
+        workflow_details = ("culprit verification workflow keys: %s" %
+                            (wf_executions))
         deferred.defer(
             _PostBugCommentDeferred,
             self.bug_id,
@@ -841,7 +859,9 @@ class Job(ndb.Model):
           _UpdateGerritDeferred,
           self.gerrit_server,
           self.gerrit_change_id,
-          '%s Job %s.\n\nSee results at: %s' % (icon, state, self.url),
+          '%s Job %s/%s %s.\n\nSee results at: %s' %
+          (icon, self.configuration, self.benchmark_arguments.benchmark, state,
+           self.url),
           _retry_options=RETRY_OPTIONS,
       )
 
@@ -985,7 +1005,7 @@ class Job(ndb.Model):
       if not self._IsTryJob():
         logging.debug('BisectDebug: Exploring perf job. ID: %s', self.job_id)
         self.state.SetImprovementDirection(self._GetImprovementDirection())
-        self.state.Explore()
+        self.state.Explore(self.benchmark_arguments, self.job_id)
       work_left = self.state.ScheduleWork()
 
       # Schedule moar task.
@@ -1020,6 +1040,8 @@ class Job(ndb.Model):
         cloud_metric.PublishPinpointJobDetailMetrics(
             app_identity.get_application_id(), self.job_id,
             self.comparison_mode, job_status, self.user, self.origin,
+            GetJobTypeByName(self.name), self.configuration,
+            self.benchmark_arguments.benchmark, self.benchmark_arguments.story,
             self.state.ChangesExamined(), self.state.TotalAttemptsExecuted(),
             0 if self.difference_count is None else self.difference_count)
 
@@ -1141,15 +1163,21 @@ class Job(ndb.Model):
         _retry_options=RETRY_OPTIONS)
 
   def _PrintJobStatusRunTimeMetrics(self, job_status, with_run_time=False):
+    job_type_by_name = GetJobTypeByName(self.name)
+
     cloud_metric.PublishPinpointJobStatusMetric(
         app_identity.get_application_id(), self.job_id, self.comparison_mode,
-        job_status, self.user, self.origin)
+        job_status, self.user, self.origin, job_type_by_name,
+        self.configuration, self.benchmark_arguments.benchmark,
+        self.benchmark_arguments.story)
 
     if with_run_time:
       job_run_time = self.updated - self.started_time
       cloud_metric.PublishPinpointJobRunTimeMetric(
           app_identity.get_application_id(), self.job_id, self.comparison_mode,
-          job_status, self.user, self.origin, job_run_time.total_seconds())
+          job_status, self.user, self.origin, job_type_by_name,
+          self.configuration, self.benchmark_arguments.benchmark,
+          self.benchmark_arguments.story, job_run_time.total_seconds())
 
 
 def _PostBugCommentDeferred(bug_id, *args, **kwargs):
@@ -1161,5 +1189,29 @@ def _PostBugCommentDeferred(bug_id, *args, **kwargs):
 
 def _UpdateGerritDeferred(*args, **kwargs):
   gerrit_service.PostChangeComment(*args, **kwargs)
+
+
+def GetJobTypeByName(name):
+  job_type_by_name = 'Others'
+
+  if name is not None:
+    if _CheckSubstringIn(name, 'Auto-Bisection'):
+      job_type_by_name = 'AutoBisect'
+      if _CheckSubstringIn(name, '[Skia]'):
+        job_type_by_name = 'SkiaAutoBisect'
+    elif _CheckSubstringIn(name, '[Skia]'):
+      job_type_by_name = 'Skia'
+    elif _CheckSubstringIn(name, 'Regression Verification'):
+      job_type_by_name = 'SandwichVerification'
+
+  return job_type_by_name
+
+
+def _CheckSubstringIn(string, sub_string):
+  """Checks if a substring is present in a string using the 'in' operator."""
+  if sub_string in string:
+    return True
+
+  return False
 
 # pylint: disable=too-many-lines

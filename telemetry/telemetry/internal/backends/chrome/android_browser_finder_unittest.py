@@ -6,8 +6,8 @@ from __future__ import absolute_import
 import os
 import posixpath
 import unittest
+from unittest import mock
 
-import mock
 from pyfakefs import fake_filesystem_unittest
 from py_utils import tempfile_ext
 
@@ -178,8 +178,8 @@ class AndroidBrowserFinderTest(fake_filesystem_unittest.TestCase):
     possible_browser = android_browser_finder.PossibleAndroidBrowser(
         'android-chromium-bundle', self.finder_options, self.fake_platform,
         android_browser_backend_settings.ANDROID_CHROMIUM_BUNDLE, 'foo_bundle')
-    with mock.patch.object(
-        self.fake_platform, 'InstallApplication') as m:
+    with mock.patch.object(self.fake_platform._platform_backend,
+                           'InstallApplication') as m:
       possible_browser.UpdateExecutableIfNeeded()
       m.assert_called_with('foo_bundle', modules={'base'})
 

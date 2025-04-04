@@ -98,7 +98,10 @@ class AlertGroup:
     group_key = cls.ds_client.AlertGroupKey(group_id)
     group = cls.ds_client.GetEntityByKey(group_key)
     if group:
-      return [a.id for a in group.get('anomalies')]
+      anomaly_ids = [a.id for a in group.get('anomalies')]
+      logging.debug('Found %d anomalies for group %s', len(anomaly_ids),
+                    group_id)
+      return anomaly_ids
     raise NoEntityFoundException('No Alert Group Found with id: %s', group_id)
 
   @classmethod
@@ -123,7 +126,8 @@ class AlertGroup:
   @classmethod
   def GetGroupsForAnomaly(
     cls, test_key, start_rev, end_rev, create_on_ungrouped=False, parity=False,
-    group_type=datastore_client.AlertGroupType.test_suite):
+    group_type=datastore_client.AlertGroupType.test_suite,
+    subscription_name=None):
     ''' Find the alert groups for the anomaly.
 
     Given the test_key and revision range of an anomaly:
@@ -141,10 +145,15 @@ class AlertGroup:
           group created if this value is true; otherwise, the existing
           'upgrouped' group will be used.
       parity: testing flag for result parity
+      group_type: the group type to look for.
+      subscription_name: the matching subscription name of the anomaly.
 
     Returns:
       a list of group ids.
     '''
+    logging.debug('GetGroupsForAnomaly starts with %s, %s, %s, %s, %s',
+                   test_key, start_rev, end_rev, group_type, subscription_name)
+
     sc_client = sheriff_config_client.GetSheriffConfigClient()
     matched_configs, err_msg = sc_client.Match(test_key)
 
@@ -152,7 +161,7 @@ class AlertGroup:
       raise SheriffConfigRequestException(err_msg)
 
     if not matched_configs:
-      return []
+      return [], []
 
     start_rev = int(start_rev)
     end_rev = int(end_rev)
@@ -163,16 +172,33 @@ class AlertGroup:
     result_groups = set()
     new_groups = set()
 
+    logging.debug(
+      '[Grouping] Matching between %s subscriptions and %s groups (%s)',
+      len(matched_configs), len(existing_groups), benchmark_name)
+    logging.debug(
+      '[Grouping] All matched subscriptions: %s',
+      [config['subscription'].get('name', 'nil') for config in matched_configs]
+    )
+    logging.debug(
+      '[Grouping] All existing groups: %s',
+      [g.key.name for g in existing_groups]
+    )
+
     for config in matched_configs:
       s = config['subscription']
+      if subscription_name and s.get('name') != subscription_name:
+        continue
       has_overlapped = False
       for g in existing_groups:
         if 'project_id' not in g:
           # crbug/1475410. We noticed some alert group has no 'project_id'.
           logging.warning('Project_id field does not exist in group: %s', g)
+        # replace empty project id using the default 'chromium'
+        project_id_in_group = g.get('project_id', '') or 'chromium'
+        project_id_in_subscription = s.get('monorail_project_id', '') or 'chromium'
         if (g['domain'] == master_name and
             g['subscription_name'] == s.get('name') and
-            g.get('project_id', '') == s.get('monorail_project_id', '') and
+            project_id_in_group == project_id_in_subscription and
             max(g['revision']['start'], start_rev) <= min(g['revision']['end'], end_rev) and
             (abs(g['revision']['start'] - start_rev) + abs(g['revision']['end'] - end_rev) <= 100 or g['domain'] != 'ChromiumPerf')):
           has_overlapped = True
@@ -197,7 +223,8 @@ class AlertGroup:
           # return the id of the 'ungrouped'
           ungrouped = cls._GetUngroupedGroup(group_type)
           if ungrouped:
-            result_groups.add(ungrouped.key.id)
+            ungrouped_id = cls.ds_client.GetEntityId(ungrouped)
+            result_groups.add(ungrouped_id)
 
     logging.debug('GetGroupsForAnomaly returning %s', result_groups)
     return list(result_groups), list(new_groups)
@@ -219,7 +246,7 @@ class AlertGroup:
     # In the current use cases, we need to load the 'ungrouped' as well.
     ungrouped = cls._GetUngroupedGroup(group_type)
     if ungrouped:
-      group_keys.append(ungrouped.key.id)
+      group_keys.append(cls.ds_client.GetEntityId(ungrouped))
 
     return group_keys
 
@@ -276,20 +303,22 @@ class AlertGroup:
 
     ungrouped_anomalies = cls.ds_client.GetMultiEntitiesByKeys(dict(ungrouped).get('anomalies'))
     logging.info('Loaded %i ungrouped alerts for group type %i. ID(%s)',
-                  len(ungrouped_anomalies), group_type, ungrouped.key.id)
+                  len(ungrouped_anomalies), group_type, cls.ds_client.GetEntityId(ungrouped))
 
     parity_results = {}
     for anomaly in ungrouped_anomalies:
       group_ids, new_ids = cls.GetGroupsForAnomaly(
         anomaly['test'].name, anomaly['start_revision'], anomaly['end_revision'],
-        create_on_ungrouped=True, parity=IS_PARITY, group_type=group_type)
+        create_on_ungrouped=True, parity=IS_PARITY, group_type=group_type,
+        subscription_name=anomaly.get('matching_subscription', {}).get('name')
+        )
       anomaly['groups'] = [cls.ds_client.AlertGroupKey(group_id) for group_id in group_ids]
       logging.debug(
         '[GroupingDebug] Ungrouped anomaly %s is associated with %s',
-        anomaly.key.id, anomaly['groups']
+        cls.ds_client.GetEntityId(anomaly), anomaly['groups']
       )
       if IS_PARITY:
-        anomaly_id = anomaly.key.id
+        anomaly_id = cls.ds_client.GetEntityId(anomaly)
         parity_results[anomaly_id] = {
           "existing_groups": list(set(group_ids) - set(new_ids)),
           "new_groups": new_ids

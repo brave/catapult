@@ -29,10 +29,6 @@ try:
   import win32gui  # pylint: disable=import-error
   import win32process  # pylint: disable=import-error
   import winerror  # pylint: disable=import-error
-  try:
-    import winreg  # pylint: disable=import-error
-  except ImportError:
-    import six.moves.winreg as winreg  # pylint: disable=import-error,wrong-import-order,ungrouped-imports
   import win32security  # pylint: disable=import-error
 except ImportError as e:
   if platform.system() == 'Windows':
@@ -48,7 +44,6 @@ except ImportError as e:
   win32process = None
   win32security = None
   winerror = None
-  winreg = None
 
 
 class WinPlatformBackend(desktop_platform_backend.DesktopPlatformBackend):
@@ -120,8 +115,22 @@ class WinPlatformBackend(desktop_platform_backend.DesktopPlatformBackend):
               ' | Select-Object -Property PCSystemType']
     else:
       args = ['wmic', 'computersystem', 'get', 'pcsystemtype']
-    lines = six.ensure_str(
-        subprocess.Popen(args, stdout=subprocess.PIPE).communicate()[0]).split()
+
+    # Retry this up to 3 times. On Windows ARM64 devices, it is unlikely but
+    # possible for the powershell command to hang indefinitely. The
+    # -OperationTimeoutSec argument for the Get-CimInstance command does not
+    # prevent this.
+    lines = []
+    for _ in range(3):
+      try:
+        proc = subprocess.run(
+            args, text=True, timeout=10, check=True, capture_output=True)
+        lines = proc.stdout.split()
+        break
+      except subprocess.CalledProcessError as e:
+        logging.error('Error running %s: %s', args, e)
+      except subprocess.TimeoutExpired as e:
+        logging.error('Timeout running %s: %s', args, e)
 
     if len(lines) > 1 and lines[0] == 'PCSystemType':
       if use_powershell:
@@ -137,10 +146,18 @@ class WinPlatformBackend(desktop_platform_backend.DesktopPlatformBackend):
     tags = super().GetTypExpectationsTags()
     if self.IsLaptop():
       tags.append('win-laptop')
+    tags.append(self.GetArchName().lower())
     return tags
 
   @decorators.Cache
   def GetArchName(self):
+    # Currently, platform.machine() does not work correctly on ARM devices.
+    # The lab still runs x64 version of Python on ARM devices,
+    # so platform.machine() returns 'AMD64' even on ARM devices.
+    # platform.processor() returns the right information, but it has too
+    # much details.
+    if platform.processor().startswith('ARM'):
+      return 'ARM'
     return platform.machine()
 
   def GetOSName(self):
@@ -148,6 +165,8 @@ class WinPlatformBackend(desktop_platform_backend.DesktopPlatformBackend):
 
   @decorators.Cache
   def GetOSVersionName(self):
+    _MIN_WIN11_BUILD = 22000
+
     os_version = platform.uname()[3]
 
     if os_version.startswith('5.1.'):
@@ -156,26 +175,16 @@ class WinPlatformBackend(desktop_platform_backend.DesktopPlatformBackend):
       return os_version_module.VISTA
     if os_version.startswith('6.1.'):
       return os_version_module.WIN7
-    # The version of python.exe we commonly use (2.7) is only manifested as
-    # being compatible with Windows versions up to 8. Therefore Windows *lies*
-    # to python about the version number to keep it runnable on Windows 10.
-    key_name = r'Software\Microsoft\Windows NT\CurrentVersion'
-    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_name)
-    try:
-      value, _ = winreg.QueryValueEx(key, 'CurrentMajorVersionNumber')
-    except OSError:
-      value = None
-    finally:
-      key.Close()
-    if value == 10:
-      return os_version_module.WIN10
     if os_version.startswith('6.2.'):
       return os_version_module.WIN8
     if os_version.startswith('6.3.'):
       return os_version_module.WIN81
-    raise NotImplementedError(
-        'Unknown win version: %s, CurrentMajorVersionNumber: %s' %
-        (os_version, value))
+    if os_version.startswith('10.0.'):
+      build = os_version.split('.')[2]
+      if int(build) >= _MIN_WIN11_BUILD:
+        return os_version_module.WIN11
+      return os_version_module.WIN10
+    raise NotImplementedError('Unknown win version: %s' % os_version)
 
   @decorators.Cache
   def GetOSVersionDetailString(self):

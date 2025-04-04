@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import
 import unittest
-import mock
+from unittest import mock
 
 from telemetry.core import platform as platform_module
 from telemetry.internal.platform import mac_platform_backend
@@ -14,6 +14,10 @@ from telemetry import decorators
 
 class MacPlatformBackendTest(unittest.TestCase):
   def testVersionCamparison(self):
+    self.assertGreater(os_version.SEQUOIA, os_version.SONOMA)
+    self.assertGreater(os_version.SONOMA, os_version.VENTURA)
+    self.assertGreater(os_version.VENTURA, os_version.MONTEREY)
+    self.assertGreater(os_version.MONTEREY, os_version.BIGSUR)
     self.assertGreater(os_version.BIGSUR, os_version.CATALINA)
     self.assertGreater(os_version.CATALINA, os_version.MOJAVE)
     self.assertGreater(os_version.MOJAVE, os_version.HIGHSIERRA)

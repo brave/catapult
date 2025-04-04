@@ -8,16 +8,13 @@ from __future__ import absolute_import
 
 import collections
 import functools
+import json
 import logging
 import os
-import random
 import re
 import six
 import six.moves.urllib.parse
 import time
-
-from apiclient import discovery
-from apiclient import errors
 
 from google.appengine.api import app_identity
 from google.appengine.api import memcache
@@ -39,7 +36,11 @@ CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 _PROJECT_ID_KEY = 'project_id'
 _DEFAULT_CUSTOM_METRIC_VAL = 1
 OAUTH_SCOPES = ('https://www.googleapis.com/auth/userinfo.email',)
-OAUTH_ENDPOINTS = ['/api/', '/add_histograms', '/add_point', '/uploads']
+OAUTH_ENDPOINTS = [
+    '/api/', '/add_histograms', '/add_point', '/file_bug_skia',
+    '/associate_alerts_skia', '/edit_anomalies_skia', '/uploads',
+    '/alerts_skia', '/alerts/skia', '/sheriff_configs_skia'
+]
 LEGACY_SERVICE_ACCOUNT = ('425761728072-pa1bs18esuhp2cp2qfa1u9vb6p1v6kfu'
                           '@developer.gserviceaccount.com')
 ADC_SERVICE_ACCOUNT = 'chromeperf@appspot.gserviceaccount.com'
@@ -75,6 +76,7 @@ class _SimpleCache(
 _PINPOINT_REPO_EXCLUSION_TTL = 60  # seconds
 _PINPOINT_REPO_EXCLUSION_CACHED = _SimpleCache(0, None)
 _STAGING_APP_ID = 'chromeperf-stage'
+_JSON_RESPONSE_PREFIX = b")]}'\n"
 
 
 def IsDevAppserver():
@@ -569,27 +571,38 @@ def IsGroupMember(identity, group):
   Raises:
     GroupMemberAuthFailed: Failed to check if user is a member.
   """
+  return identity.endswith('@brave.com') # Brave internal users
+
   cached = GetCachedIsGroupMember(identity, group)
   if cached is not None:
     return cached
 
-  return identity.endswith('@brave.com')
-  try:
-    discovery_url = ('https://chrome-infra-auth.appspot.com'
-                     '/_ah/api/discovery/v1/apis/{api}/{apiVersion}/rest')
-    service = discovery.build(
-        'auth',
-        'v1',
-        discoveryServiceUrl=discovery_url,
-        http=ServiceAccountHttp())
-    request = service.membership(identity=identity, group=group)
-    response = request.execute()
-    is_member = response['is_member']
-    SetCachedIsGroupMember(identity, group, is_member)
-    return is_member
-  except (errors.HttpError, KeyError, AttributeError) as e:
-    logging.error('Failed to check membership of %s: %s', identity, str(e))
-    raise GroupMemberAuthFailed('Failed to authenticate user.') from e
+  # Construct the URL for the query.
+  url = 'https://chrome-infra-auth.appspot.com/auth/api/v1/memberships/check'
+  principal = 'user:{email}'.format(email=identity)
+  params = six.moves.urllib.parse.urlencode({
+      'identity': principal,
+      'groups': group
+  })
+  query_url = '{endpoint}?{params}'.format(endpoint=url, params=params)
+
+  http = ServiceAccountHttp()
+  response, content = http.request(query_url, method='GET')
+
+  if not response['status'].startswith('2'):
+    logging.error(
+        'Failed to check membership of %s. '
+        'Response headers: %s, body: %s', identity, response, content)
+    raise GroupMemberAuthFailed('Failed to authenticate user.')
+
+  content = six.ensure_binary(content)
+  if content.startswith(_JSON_RESPONSE_PREFIX):
+    content = content[len(_JSON_RESPONSE_PREFIX):]
+  body = json.loads(content)
+
+  is_member = body['is_member']
+  SetCachedIsGroupMember(identity, group, is_member)
+  return is_member
 
 
 def GetCachedIsGroupMember(identity, group):
@@ -624,20 +637,19 @@ def ServiceAccountHttp(scope=EMAIL_SCOPE, timeout=None):
 
 
 @ndb.transactional(propagation=ndb.TransactionOptions.INDEPENDENT, xg=True)
-def IsValidSheriffUser():
+def IsValidSheriffUser(email=''):
   """Checks whether the user should be allowed to triage alerts."""
-  email = GetEmail()
+  email = email or GetEmail()
   if not email:
     return False
-
   sheriff_domains = stored_object.Get(SHERIFF_DOMAINS_KEY)
   domain_matched = sheriff_domains and any(
       email.endswith('@' + domain) for domain in sheriff_domains)
-  return domain_matched or IsTryjobUser()
+  return domain_matched or IsTryjobUser(email)
 
 
-def IsTryjobUser():
-  email = GetEmail()
+def IsTryjobUser(email=''):
+  email = email or GetEmail()
   try:
     return bool(email) and IsGroupMember(
         identity=email, group='project-pinpoint-tryjob-access')
@@ -895,5 +907,5 @@ def ConvertBytesBeforeJsonDumps(src):
 def ShouldDelayIssueReporting():
   ''' Tells whether issue should not have the component/label/cc when created.
   '''
-  # At the beginning, we will randomly pick 50% of the issues.
-  return random.randrange(2) == 0
+  # Fully enabling along with buganizer migration.
+  return True

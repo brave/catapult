@@ -400,7 +400,7 @@ class AdbWrapper(object):
         # Wait for process finish.
         # This could be simplified with |self._process.wait(5)| after
         # migration to py3-only.
-        timeout_if_no_finish = datetime.now() + timedelta(seconds=5)
+        timeout_if_no_finish = datetime.now() + timedelta(seconds=8)
         while self._process.poll() is None:
           if datetime.now() > timeout_if_no_finish:
             logging.warning('Adb wedged. Kill')
@@ -428,7 +428,7 @@ class AdbWrapper(object):
 
         self._process.stdin.write(six.ensure_binary(send_cmd))
         self._process.stdin.flush()  # Ensure underlying stdio flushes.
-        timeout_if_no_start_by = datetime.now() + timedelta(milliseconds=2500)
+        timeout_if_no_start_by = datetime.now() + timedelta(milliseconds=4000)
 
         # Enter select loop for subprocess to avoid deadlock problems
         # when reading/writing to children via pipes.
@@ -444,7 +444,7 @@ class AdbWrapper(object):
             self._process.stdin.write(send_cmd.encode('utf-8'))
             self._process.stdin.flush()  # Ensure underlying stdio flushes.
             timeout_if_no_start_by = datetime.now() + timedelta(
-                milliseconds=500)
+                milliseconds=2000)
 
           if self._process.poll() is not None:
             raise device_errors.AdbShellCommandFailedError(
@@ -620,28 +620,32 @@ class AdbWrapper(object):
                  check_error=True,
                  cpu_affinity=None,
                  additional_env=None):
-    if timeout:
+    if not timeout:
       remaining = timeout_retry.CurrentTimeoutThreadGroup().GetRemainingTime()
       if remaining:
         # Use a slightly smaller timeout than remaining time to ensure that we
         # have time to collect output from the command.
-        timeout = 0.95 * remaining
+        cmd_timeout = 0.95 * remaining
       else:
-        timeout = None
+        cmd_timeout = None
+    else:
+      cmd_timeout = timeout
     env = cls._ADB_ENV.copy()
     if additional_env:
       env.update(additional_env)
+    adb_cmd = cls._BuildAdbCmd(args, device_serial, cpu_affinity=cpu_affinity)
     try:
-      adb_cmd = cls._BuildAdbCmd(args, device_serial, cpu_affinity=cpu_affinity)
       status, output = cmd_helper.GetCmdStatusAndOutputWithTimeout(adb_cmd,
-                                                                   timeout,
+                                                                   cmd_timeout,
                                                                    env=env)
     except OSError as e:
       if e.errno in (errno.ENOENT, errno.ENOEXEC):
         raise device_errors.NoAdbError(msg=str(e))
       raise
     except cmd_helper.TimeoutError:
-      logger.exception('Timeout on adb command: %r', adb_cmd)
+      logger.exception(
+          'Timeout on adb command (timeout=%r, retries=%r, '
+          'cmd_timeout=%r): %r', timeout, retries, cmd_timeout, adb_cmd)
       raise
 
     # Best effort to catch errors from adb; unfortunately adb is very
@@ -807,6 +811,29 @@ class AdbWrapper(object):
                    additional_env=additional_env)
 
   @classmethod
+  def Connect(cls,
+              host,
+              port=5555,
+              timeout=DEFAULT_TIMEOUT,
+              retries=DEFAULT_RETRIES):
+    """Connect to a device with TCP.
+
+    Args:
+      host: The host or IP of the device.
+      port (optional): The port to connect to.
+      timeout: (optional) Timeout per try in seconds.
+      retries: (optional) Number of retries to attempt.
+    """
+    cmd = ['connect', f'{host}:{port}']
+    output = cls._RunAdbCmd(cmd,
+                            timeout=timeout,
+                            retries=retries,
+                            check_error=True)
+    if f'connected to {host}:{port}' not in output:
+      logger.warning('adb connect to %s:%s may have failed, output: %s', host,
+                     port, output)
+
+  @classmethod
   def GetDevices(cls, timeout=DEFAULT_TIMEOUT, retries=DEFAULT_RETRIES):
     """DEPRECATED. Refer to Devices(...) below."""
     # TODO(jbudorick): Remove this function once no more clients are using it.
@@ -960,9 +987,9 @@ class AdbWrapper(object):
   def Pull(self,
            remote,
            local,
-           timeout=DEFAULT_LONG_TIMEOUT,
+           timeout=DEFAULT_SUPER_LONG_TIMEOUT,
            retries=DEFAULT_RETRIES):
-    """Pulls a file from the device to the host.
+    """Pulls a file or directory from the device to the host.
 
     Args:
       remote: Path on the device filesystem.

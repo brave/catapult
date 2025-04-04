@@ -54,34 +54,50 @@ class RunTestsCommand(command_line.OptparseCommand):
 
   @classmethod
   def AddCommandLineArgs(cls, parser, _):
-    parser.add_option('--start-xvfb', action='store_true',
-                      default=False, help='Start Xvfb display if needed.')
-    parser.add_option(
-        '--disable-cloud-storage-io',
-        action='store_true', default=False,
-        help=('Disable cloud storage IO.'))
-    parser.add_option('--no-browser', action='store_true', default=False,
-                      help='Don\'t require an actual browser to run the tests.')
-    parser.add_option('-d', '--also-run-disabled-tests',
-                      dest='run_disabled_tests',
-                      action='store_true', default=False,
-                      help='Ignore @Disabled and @Enabled restrictions.')
-    parser.add_option('--client-config', dest='client_configs',
-                      action='append', default=[])
-    parser.add_option('--disable-logging-config', action='store_true',
-                      default=False, help='Configure logging (default on)')
-    parser.add_option('--use-persistent-shell', action='store_true',
-                      help='Uses a persistent shell adb connection when set.')
-    parser.add_option('-v', '--verbose', action='count', dest='verbosity',
-                      help='Increase verbosity level (repeat as needed)')
+    parser.add_argument('--start-xvfb',
+                        action='store_true',
+                        help='Start Xvfb display if needed.')
+    parser.add_argument('--disable-cloud-storage-io',
+                        action='store_true',
+                        help='Disable cloud storage IO.')
+    parser.add_argument(
+        '--no-browser',
+        action='store_true',
+        help='Don\'t require an actual browser to run the tests.')
+    parser.add_argument('-d',
+                        '--also-run-disabled-tests',
+                        dest='run_disabled_tests',
+                        action='store_true',
+                        help='Ignore @Disabled and @Enabled restrictions.')
+    parser.add_argument('--client-config',
+                        dest='client_configs',
+                        action='append',
+                        default=[])
+    parser.add_argument('--disable-logging-config',
+                        action='store_true',
+                        help='Configure logging (default on)')
+    parser.add_argument('--use-persistent-shell',
+                        action='store_true',
+                        help='Uses a persistent shell adb connection when set.')
+    parser.add_argument('-v',
+                        '--verbose',
+                        action='count',
+                        dest='verbosity',
+                        default=0,
+                        help='Increase verbosity level (repeat as needed)')
+    # This arg is needed since android coverage bots on Chrome CI pass this in
+    # unconditionally and expect every test harness to honor the arg.
+    # TODO(crbug.com/40564748): Only specify this arg in generated wrapper
+    # scripts for test harnesses that actually support it.
+    parser.add_argument('--coverage-dir', help='Unused.')
 
-    typ.ArgumentParser.add_option_group(parser,
-                                        "Options for running the tests",
-                                        running=True,
-                                        skip=['-d', '-v', '--verbose'])
-    typ.ArgumentParser.add_option_group(parser,
-                                        "Options for reporting the results",
-                                        reporting=True)
+    group = parser.add_argument_group('Options for running the tests')
+    typ.ArgumentParser.add_arguments_to_parser(group,
+                                               running=True,
+                                               skip=['-d', '-v', '--verbose'])
+
+    group = parser.add_argument_group('Options for reporting the results')
+    typ.ArgumentParser.add_arguments_to_parser(group, reporting=True)
 
   @classmethod
   def ProcessCommandLineArgs(cls, parser, args, _):

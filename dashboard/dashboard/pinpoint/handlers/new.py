@@ -18,6 +18,7 @@ from dashboard.api import api_request_handler
 from dashboard.api import api_auth
 from dashboard.common import bot_configurations
 from dashboard.common import cloud_metric
+from dashboard.common import isolate_targets as iso
 from dashboard.common import utils
 from dashboard.pinpoint.models import change
 from dashboard.pinpoint.models import errors
@@ -31,7 +32,6 @@ from dashboard.pinpoint.models.tasks import read_value
 
 _ERROR_BUG_ID = 'Bug ID must be an integer.'
 _ERROR_TAGS_DICT = 'Tags must be a dict of key/value string pairs.'
-_ERROR_UNSUPPORTED = 'This benchmark (%s) is unsupported.'
 _ERROR_PRIORITY = 'Priority must be an integer.'
 
 _EXTRA_BROWSER_ARGS_PREFIX = '--extra-browser-args'
@@ -54,12 +54,12 @@ SUFFIXES = {
     '_android_clank_monochrome',
     '_android_clank_monochrome_64_32_bundle',
     '_android_clank_monochrome_bundle',
-    '_android_clank_trichrome_bundle',
-    '_android_clank_trichrome_chrome_google_64_32_bundle',
     '_android_clank_trichrome_webview',
     '_android_clank_trichrome_webview_bundle',
     '_android_clank_webview',
     '_android_clank_webview_bundle',
+    '_android_trichrome_chrome_google_bundle',
+    '_android_trichrome_chrome_google_64_32_bundle',
 }
 # Map from target to fallback target.
 REGULAR_TELEMETRY_TESTS_WITH_FALLBACKS = {}
@@ -83,6 +83,7 @@ REGULAR_TELEMETRY_TESTS_WITH_FALLBACKS[
 
 _NON_CHROME_TARGETS = ['v8']
 
+_ATTEMPT_COUNT_LIMIT = 150
 
 def _CheckUser():
   if utils.IsDevAppserver():
@@ -182,6 +183,10 @@ def _CreateJob(req):
     initial_attempt_count = int(initial_attempt_count)
   except (TypeError, ValueError):
     initial_attempt_count = None
+
+  if initial_attempt_count and initial_attempt_count > _ATTEMPT_COUNT_LIMIT:
+    raise ValueError('Attempt count cannot be greater than %d.'
+                       % _ATTEMPT_COUNT_LIMIT)
 
   # Create job.
   try:
@@ -481,7 +486,7 @@ def GetIsolateTarget(bot_name, suite):
   if 'webview' in bot_name.lower():
     return 'performance_webview_test_suite'
 
-  # Special cases for CrOS tests -
+  # Special cases for CrOS tests
   # performance_test_suites are device type specific.
   if 'eve' in bot_name.lower():
     return 'performance_test_suite_eve'
@@ -492,40 +497,10 @@ def GetIsolateTarget(bot_name, suite):
   if 'fuchsia-perf' in bot_name.lower():
     return 'performance_web_engine_test_suite'
 
-  # Each Android binary has its own target, and different bots use different
-  # binaries. Mapping based off of Chromium's
-  # //tools/perf/core/perf_data_generator.py
-  if bot_name in ['android-go-perf', 'android-go-perf-pgo']:
-    return 'performance_test_suite_android_clank_monochrome'
-  if bot_name == 'android-go-wembley-perf':
-    return 'performance_test_suite_android_clank_trichrome_bundle'
-  if bot_name in ['android-new-pixel-perf', 'android-new-pixel-perf-pgo']:
-    return ('performance_test_suite_android_clank_'
-            'trichrome_chrome_google_64_32_bundle')
-  if bot_name in [
-      'android-new-pixel-pro-perf', 'android-new-pixel-pro-perf-pgo'
-  ]:
-    return ('performance_test_suite_android_clank_'
-            'trichrome_chrome_google_64_32_bundle')
-  if bot_name == 'android-pixel2-perf-calibration':
-    return 'performance_test_suite_android_clank_monochrome_64_32_bundle'
-  if bot_name == 'android-pixel2-perf-fyi':
-    return 'performance_test_suite_android_clank_monochrome'
-  if bot_name == 'android-pixel2-perf-aab-fyi':
-    return 'performance_test_suite_android_clank_monochrome_bundle'
-  if bot_name == 'android-pixel2-perf':
-    return 'performance_test_suite_android_clank_monochrome_64_32_bundle'
-  if bot_name in ['android-pixel4-perf', 'android-pixel4-perf-pgo']:
-    return 'performance_test_suite_android_clank_trichrome_bundle'
-  if bot_name in ['android-pixel6-perf', 'android-pixel6-perf-pgo']:
-    return 'performance_test_suite_android_clank_trichrome_bundle'
-  if bot_name in ['android-pixel6-pro-perf', 'android-pixel6-pro-perf-pgo']:
-    return 'performance_test_suite_android_clank_trichrome_bundle'
-  if 'android' in bot_name.lower():
-    raise Exception(
-        'Given Android bot %s does not have an isolate mapped to it' % bot_name)
-
-  return 'performance_test_suite'
+  return iso.GetAndroidTarget(
+      bot_name,
+      Exception('Given Android bot %s does not have an isolate mapped to it' %
+                bot_name))
 
 
 def _GenerateQuests(arguments):

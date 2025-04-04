@@ -6,7 +6,8 @@ from __future__ import absolute_import
 
 from enum import Enum
 from google.cloud import datastore
-
+from google.cloud.datastore.key import Key
+from google.cloud.datastore.query import PropertyFilter
 
 def TestKey(test_path, datastore_client):
   """Returns the key that corresponds to a test path."""
@@ -22,6 +23,13 @@ def TestKey(test_path, datastore_client):
     return datastore_client.key(pairs=key_list)
   return datastore_client.key('TestMetadata', test_path)
 
+def RunQuery(ds_query, post_query_filters):
+  results = list(ds_query.fetch())
+  filtered_results = [
+      alert for alert in results if all(
+          post_filter(alert) for post_filter in post_query_filters)
+  ]
+  return filtered_results
 
 class EntityType(Enum):
   """Enum defining the entity types currently supported."""
@@ -32,6 +40,58 @@ class EntityType(Enum):
 
 class DataStoreClient:
   _client = datastore.Client()
+
+  def QueryAnomaliesForKey(self, key: str):
+    entity = self.GetEntityFromUrlSafeKey(key)
+    if not entity:
+      return []
+    subscriptions = entity.get('subscription_names')
+
+    ds_query = self._client.query(kind='Anomaly', order=['-timestamp'])
+    ds_query.add_filter(
+        filter=PropertyFilter('subscription_names', 'IN', subscriptions))
+
+    requested_anomalies = list(ds_query.fetch(limit=2500))
+
+    filtered_results = [
+        a for a in requested_anomalies if a.key != entity.key
+        and a.get('start_revision') <= entity.get('end_revision')
+        and a.get('end_revision') >= entity.get('start_revision')
+    ]
+
+    return [entity] + filtered_results
+
+  def QueryAnomaliesAroundRevision(self, revision: int):
+    ds_query = self._client.query(kind='Anomaly', order=['end_revision'])
+    ds_query.add_filter('end_revision', '>=', revision)
+
+    results = list(ds_query.fetch(limit=1000))
+    filtered_results = [
+      a for a in results
+      if a.get('start_revision') <= revision and a.get('source') != 'skia'
+    ]
+
+    return filtered_results
+
+  def QueryAnomaliesTimestamp(self, tests, start_time, end_time):
+    ds_query = self._client.query(kind='Anomaly')
+    test_keys = [TestKey(test_path, self._client) for test_path in tests]
+    ds_query.add_filter('test', 'IN', test_keys)
+
+    # Due to the way the indexes in Datastore work, we can one inequality
+    # property we can filter on. With the 'test' filter above, the key
+    # becomes the inequality property. Hence, in order to filter by revision,
+    # we need to apply the filters after the results are retrieved from
+    # datastore.
+    post_query_filters = [
+        lambda a: a.get('timestamp') >= start_time,
+        lambda a: a.get('timestamp') <= end_time,
+        # TODO: Remove the check below once we fully enable anomalies from skia
+        lambda a: a.get('source', None) == None,
+    ]
+
+    return RunQuery(ds_query, post_query_filters)
+
 
   def QueryAnomalies(self, tests, min_revision, max_revision):
     ds_query = self._client.query(kind='Anomaly')
@@ -49,12 +109,8 @@ class DataStoreClient:
         # TODO: Remove the check below once we fully enable anomalies from skia
         lambda a: a.get('source', None) == None,
     ]
-    results = list(ds_query.fetch())
-    filtered_results = [
-        alert for alert in results if all(
-            post_filter(alert) for post_filter in post_query_filters)
-    ]
-    return filtered_results
+
+    return RunQuery(ds_query, post_query_filters)
 
   def QueryAlertGroups(self, group_name, group_type):
     query = self._client.query(kind='AlertGroup')
@@ -68,12 +124,23 @@ class DataStoreClient:
 
     return filtered_results
 
+  def GetFirstRowForRevision(self, revision_number:int):
+    query = self._client.query(kind='Row', order=['-revision'])
+    query.add_filter('revision', '<=', revision_number)
+    results = list(query.fetch(limit=1))
+    return results[0]
+
   def GetEntity(self, entity_type:EntityType, entity_id):
     """Retrieves an entity of the specified type with the specified id."""
     entity_key = self._client.key(entity_type.value, entity_id)
     return self._client.get(entity_key)
 
-  def GetEntities(self, entity_type:EntityType, entity_ids:[]):
+  def GetEntityFromUrlSafeKey(self, urlsafe_key):
+    """Retrieves an entity using a urlsafe key."""
+    entity_key = Key.from_legacy_urlsafe(urlsafe_key)
+    return self._client.get(entity_key)
+
+  def GetEntities(self, entity_type: EntityType, entity_ids: []):
     """Retrieves multiple entities of the specified type."""
     entity_keys = [self._client.key(entity_type.value, entity_id)
                    for entity_id in entity_ids]
@@ -97,3 +164,8 @@ class DataStoreClient:
         self._client.put_multi(entities)
     else:
       self._client.put_multi(entities)
+
+  def RunTransaction(self, func):
+    with self._client.transaction():
+      ret_value = func()
+      return ret_value

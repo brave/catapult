@@ -9,7 +9,7 @@ from __future__ import absolute_import
 
 import datetime
 import json
-import mock
+from unittest import mock
 import six
 import unittest
 import uuid
@@ -335,7 +335,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
                        self._issue_tracker.add_comment_args[0])
       self.assertIn('Added 2 regressions to the group',
                     self._issue_tracker.add_comment_kwargs['comment'])
-      self.assertIn('4 regressions in test_suite',
+      self.assertIn('[4] regressions in test_suite',
                     self._issue_tracker.add_comment_kwargs['title'])
       self.assertIn('sheriff', self._issue_tracker.add_comment_kwargs['title'])
       self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
@@ -386,7 +386,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
                        self._issue_tracker.add_comment_args[0])
       self.assertIn('Added 2 regressions to the group',
                     self._issue_tracker.add_comment_kwargs['comment'])
-      self.assertIn('4 regressions in test_suite',
+      self.assertIn('[4] regressions in test_suite',
                     self._issue_tracker.add_comment_kwargs['title'])
       self.assertIn('sheriff', self._issue_tracker.add_comment_kwargs['title'])
       self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
@@ -437,7 +437,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
                        self._issue_tracker.add_comment_args[0])
       self.assertIn('Added 2 regressions to the group',
                     self._issue_tracker.add_comment_kwargs['comment'])
-      self.assertIn('4 regressions in test_suite',
+      self.assertIn('[4] regressions in test_suite',
                     self._issue_tracker.add_comment_kwargs['title'])
       self.assertIn('sheriff', self._issue_tracker.add_comment_kwargs['title'])
       self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
@@ -821,7 +821,8 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             anomalies=ndb.get_multi(anomalies),
             issue=None,
         ))
-    self.assertIn('2 regressions', self._issue_tracker.new_bug_kwargs['title'])
+    self.assertIn('[2] regressions',
+                  self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
         'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
@@ -867,7 +868,8 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             anomalies=ndb.get_multi(anomalies),
             issue=None,
         ))
-    self.assertIn('2 regressions', self._issue_tracker.new_bug_kwargs['title'])
+    self.assertIn('[2] regressions',
+                  self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
         'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
@@ -917,7 +919,8 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             anomalies=ndb.get_multi(anomalies),
             issue=None,
         ))
-    self.assertIn('2 regressions', self._issue_tracker.new_bug_kwargs['title'])
+    self.assertIn('[2] regressions',
+                  self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
         'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
@@ -1037,7 +1040,8 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             anomalies=ndb.get_multi(anomalies),
             issue=None,
         ))
-    self.assertIn('2 regressions', self._issue_tracker.new_bug_kwargs['title'])
+    self.assertIn('[2] regressions',
+                  self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
         'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
@@ -1584,7 +1588,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertIsNone(workflow_anomaly)
     feature_flags.SANDWICH_VERIFICATION = True
 
-  def testSandwich_RegressionVerification_Failed_startBisection(self):
+  def testSandwich_RegressionVerificationFailed_SkipBisection(self):
     # Pre-coditions:
     # - feature_flags.SANDWICH_VERIFICATION is True
     # - New anomaly appears
@@ -1595,10 +1599,9 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     # - Cloud Workflow service has an execution with that workflow id, and its state is FAILED
     # - The workflow execution has no results, just an error
     # Post-conditions:
-    # - The anomaly's AlertGroup state is now 'bisected' (fail safe back to default behavior)
+    # - The anomaly's AlertGroup state is not 'bisected' (fail safe back to default behavior)
     # - A new "Sandwich Verification" *cloud* workflow has *not* been requested
     # - The AlertGroup's sandwich_verification_workflow_id is not changed
-    # - A pinpoint bisection job has been started for the alert group (the fail safe behavior)
     # - The issue tracker has been called to update the bug label Regression-Verification-Failed
     #.  and status Unconfirmed.
     # - The issue does not have components from the sandwich sheriff config assigned to it
@@ -1645,14 +1648,17 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             anomalies=ndb.get_multi(anomalies),
             issue=self._issue_tracker.issue,
         ))
-    self.assertNotIn('Chromeperf-Auto-BisectOptOut',
-                     self._issue_tracker.issue.get('labels'))
+    self.assertEqual([
+        'Chromeperf-Auto-Closed', 'Chromeperf-Auto-Triaged', 'M-61', 'Pri-2',
+        'Pri-3', 'Regression-Verification-Failed',
+        'Restrict-View-Google', 'Type-Bug', 'Type-Bug-Regression'
+    ], sorted(self._issue_tracker.issue.get('labels')))
     self.assertNotIn('should>not>set>component', self._issue_tracker.issue.get('components'))
     self.assertIsNotNone(w._group.sandwich_verification_workflow_id)
-    self.assertIsNotNone(self._pinpoint.new_job_request)
+    self.assertIsNone(self._pinpoint.new_job_request)
 
     # First is a NewBug call in the test itself.
-    self.assertEqual(len(self._issue_tracker.calls), 3)
+    self.assertEqual(len(self._issue_tracker.calls), 2)
 
     self.assertEqual(self._issue_tracker.calls[1]['method'], 'AddBugComment')
     self.assertEqual(len(self._issue_tracker.calls[1]['args']), 2)
@@ -1662,14 +1668,16 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
 
     self.assertEqual(
         self._issue_tracker.calls[1]['kwargs'], {
-            'comment': mock.ANY,
-            'labels': 'Regression-Verification-Failed',
-            'send_email': False,
-            'status': 'Unconfirmed',
+            'comment':
+                mock.ANY,
             'components': [],
+            'status': 'WontFix',
+            'labels':
+                ['Chromeperf-Auto-Closed', 'Regression-Verification-Failed'],
+            'send_email': False,
         })
 
-    self.assertEqual(w._group.status, alert_group.AlertGroup.Status.bisected)
+    self.assertEqual(w._group.status, alert_group.AlertGroup.Status.closed)
 
   def testSandwich_RegressionVerification_NoRepro_skipBisect(self):
     # Pre-coditions:
@@ -1846,9 +1854,9 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(
         self._issue_tracker.calls[1]['kwargs'], {
             'comment': mock.ANY,
-            'labels': 'Regression-Verification-Repro',
+            'labels': ['Regression-Verification-Repro'],
             'send_email': False,
-            'status': 'Available',
+            'status': 'Untriaged',
             'components': ['sub>can>set>component'],
         })
     self.assertEqual(w._group.status, alert_group.AlertGroup.Status.bisected)
@@ -1943,9 +1951,9 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(
         self._issue_tracker.calls[1]['kwargs'], {
             'comment': mock.ANY,
-            'labels': 'Regression-Verification-Repro',
+            'labels': ['Regression-Verification-Repro'],
             'send_email': False,
-            'status': 'Available',
+            'status': 'Untriaged',
             'components': [],
         })
     self.assertEqual(w._group.status, alert_group.AlertGroup.Status.bisected)
@@ -2830,7 +2838,8 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             'args': (42, 'chromium'),
             'kwargs': {
                 'title':
-                    '[%s]: %d regressions in %s' % ('sheriff', 3, 'test_suite'),
+                    '[%s]: [%d] regressions in %s' %
+                    ('sheriff', 3, 'test_suite'),
                 'labels': [
                     'Chromeperf-Auto-Triaged',
                     'Pri-2',
@@ -2908,7 +2917,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(
         self._issue_tracker.calls[2]['kwargs'], {
             'title':
-                '[%s]: %d regressions in %s' % ('sheriff', 3, 'test_suite'),
+                '[%s]: [%d] regressions in %s' % ('sheriff', 3, 'test_suite'),
             'labels': [
                 'Chromeperf-Auto-Triaged',
                 'Pri-2',
@@ -2978,7 +2987,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(
         self._issue_tracker.calls[1]['kwargs'], {
             'title':
-                '[%s]: %d regressions in %s' % ('sheriff', 3, 'test_suite'),
+                '[%s]: [%d] regressions in %s' % ('sheriff', 3, 'test_suite'),
             'labels': [
                 'Chromeperf-Auto-Triaged',
                 'Pri-2',
@@ -3060,7 +3069,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             'method': 'AddBugComment',
             'args': (42, 'chromium'),
             'kwargs': {
-                'title': '[blocked-sheriff]: 3 regressions in test_suite',
+                'title': '[blocked-sheriff]: [3] regressions in test_suite',
                 'labels': [
                     'Chromeperf-Auto-Triaged',
                     'Pri-2',
@@ -3156,7 +3165,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
             'args': (42, 'chromium'),
             'kwargs': {
                 'title':
-                    '[%s]: %d regressions in %s' %
+                    '[%s]: [%d] regressions in %s' %
                     ('sheriff', 3, 'regular_suite'),
                 'labels': [
                     'Chromeperf-Auto-Triaged',

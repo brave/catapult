@@ -201,20 +201,25 @@ class LinuxFindTest(fake_filesystem_unittest.TestCase):
     output_dir_env = os.environ.pop('CHROMIUM_OUTPUT_DIR', None)
 
     try:
-      for target in ['Release', 'Debug']:
+      for target in [
+          'Release',
+          'Debug',
+      ]:
         for browser in ['chrome', 'content_shell']:
           self.CreateBrowser('/src/out/%s/%s' % (target, browser))
 
-      self.assertEqual(
-          set(self.DoFindAllTypes()),
-          {'debug', 'release', 'content-shell-debug', 'content-shell-release'})
+      self.assertEqual(set(self.DoFindAllTypes()), {
+          'debug',
+          'release',
+          'content-shell-debug',
+          'content-shell-release',
+      })
     finally:
       if output_dir_env is not None:
         os.environ['CHROMIUM_OUTPUT_DIR'] = output_dir_env
 
   def testFindAllFailsIfNotExecutable(self):
     self.fs.CreateFile('/src/out/Release/chrome')
-
     self.assertFalse(self.DoFindAllTypes())
 
   @decorators.Disabled('android')  # Test not applicable to Android
@@ -293,17 +298,13 @@ class WinFindTest(FindTestBase):
             'system', 'canary'
         })
 
-  def testFindAllWithExact(self):
+  def testNotFindAllWithExact(self):
     if not self.CanFindAvailableBrowsers():
       return
 
     self._finder_options.browser_executable = 'c:\\tmp\\chrome.exe'
     types = self.DoFindAllTypes()
-    self.assertEqual(
-        set(types), {
-            'exact', 'debug', 'release', 'content-shell-debug',
-            'content-shell-release', 'system', 'canary'
-        })
+    self.assertEqual(set(types), {'exact'})
 
   def testNoErrorWithUnrecognizedExecutableName(self):
     if not self.CanFindAvailableBrowsers():

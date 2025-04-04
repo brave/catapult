@@ -8,6 +8,7 @@ from __future__ import absolute_import
 
 import collections
 import json
+import logging
 import six
 
 try:
@@ -17,7 +18,7 @@ except ImportError:
 
 from dashboard.pinpoint.models.change import commit as commit_module
 from dashboard.pinpoint.models.change import patch as patch_module
-
+from dashboard.services import request
 
 class Change(
     collections.namedtuple('Change',
@@ -236,7 +237,11 @@ class Change(
     commits_b = list(change_b.commits)
 
     _ExpandDepsToMatchRepositories(commits_a, commits_b)
+    logging.debug(
+        "b/343229141 - commits_a vs commits_b after expandDeps: %s vs %s",
+        commits_a, commits_b)
     commits_midpoint = _FindMidpoints(commits_a, commits_b)
+    logging.debug("b/343229141 - commits_midpoint: %s", commits_midpoint)
 
     if commits_a == commits_midpoint:
       raise commit_module.NonLinearError('Changes are the same or adjacent.')
@@ -265,6 +270,8 @@ def _ExpandDepsToMatchRepositories(commits_a, commits_b):
     commits_a: A list of Commits.
     commits_b: A list of Commits.
   """
+  logging.debug("b/343229141 - expandDEPS of commits_a vs commits_b: %s vs %s",
+                commits_a, commits_b)
   # First, scrub the list of commits of things we shouldn't be looking into.
   commits_a[:] = [
       c for c in commits_a if commit_module.RepositoryInclusionFilter(c)
@@ -278,14 +285,18 @@ def _ExpandDepsToMatchRepositories(commits_a, commits_b):
     commits_a, commits_b = commits_b, commits_a
 
   # Loop through every DEPS file in commits_a.
+  logging.debug("b/343229141: commits a before for loop %s", commits_a)
   for commit_a in commits_a:
+    logging.debug("b/343229141: commit a %s", commit_a)
     if len(commits_a) == len(commits_b):
+      logging.debug("len commits a == len commits b")
       break
     deps_a = commit_a.Deps()
-
+    logging.debug("b/343229141 - commit_a %s and deps_a %s", commit_a, deps_a)
     # Look through commits_b for any extra slots to fill with the DEPS.
     for commit_b in commits_b[len(commits_a):]:
       dep_a = _FindRepositoryUrlInDeps(deps_a, commit_b.repository_url)
+      logging.debug("b/343229141 - found extra dep_a %s", dep_a)
       if dep_a:
         dep_commit = commit_module.Commit.FromDep(dep_a)
         if dep_commit is not None:
@@ -316,6 +327,9 @@ def _FindMidpoints(commits_a, commits_b):
   """
   commits_midpoint = []
 
+  logging.debug(
+      "b/343229141 - findMidpoints of commits_a vs commits_b: %s vs %s",
+      commits_a, commits_b)
   for commit_a, commit_b in zip_longest(commits_a, commits_b):
     if not (commit_a and commit_b):
       # If the commit lists are not the same length, bail out. That could happen
@@ -324,13 +338,26 @@ def _FindMidpoints(commits_a, commits_b):
       raise commit_module.NonLinearError(
           'Changes have a different number of commits.')
 
-    commit_midpoint = commit_module.Commit.Midpoint(commit_a, commit_b)
+    try:
+      commit_midpoint = commit_module.Commit.Midpoint(commit_a, commit_b)
+    except request.NotFoundError:
+      # Unable to find the midpoint. This is most likely because Pinpoint has
+      # drilled down to an unsupported git repo. Skip this pair of commits.
+      logging.warning(
+          "_FindMidpoints: midpoint not found between %s and %s, skipping",
+          commit_a, commit_b)
+      continue
+    logging.debug("b/343229141 - commit_midpoint: %s", commit_midpoint)
     commits_midpoint.append(commit_midpoint)
     if commit_a == commit_midpoint and commit_midpoint != commit_b:
       # Commits are adjacent.
       # Add any DEPS changes to the commit lists.
       deps_a = commit_a.Deps()
       deps_b = commit_b.Deps()
+      logging.debug(
+          "b/343229141 - findMidpoint: apply deps changes deps_a vs deps_b %s vs %s",
+          deps_a, deps_b)
+
       dep_commits_a = (
           commit_module.Commit.FromDep(dep)
           for dep in deps_a.difference(deps_b)
