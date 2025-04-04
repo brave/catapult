@@ -23,21 +23,28 @@ _TOP_METRICS_PATTERN = re.compile('|'.join([
     # CPU:
     'cpuTime:',
 
-    # JS performance:
-    'speedometer2/RunsPerMinute',
+    # speedometer3:
+    'speedometer3/Score',
+
+    # jetstream2:
+    'jetstream2/Score',
+
+    # Motionmark:
+    'rendering.(desktop|mobile)/motionmark/',
+
     'rectsBasedSpeedIndex',
 
-    # apk
-    'apk_size/TransferSize',
-    'apk_size/InstallSize',
-    'apk_size/InstallBreakdown',
+    # apk_size:
+    'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
 
     # Startup
     'Startup.FirstWebContents.MainNavigationStart',
     'startup/navigationStart',
+    'system_health.common_(desktop|mobile)/navigationStart',
 
     # Page loading:
     'timeToOnload/',
+    'timeToInteractive/',
     'timeToFirstMeaningfulPaint/',
     'cpuTimeToFirstMeaningfulPaint/',
 
@@ -54,6 +61,8 @@ _IGNORE_PATTERN = re.compile('|'.join([
   '_min',
   '_max',
   '_std',
+
+  # skip aggregate metrics:
   r'^([^/]+/){2}system_health.\w+(/[^/]+){1,2}$',
   r'^([^/]+/){2}loading.[^/]+(/[^/]+){1,2}$',
 ]))
