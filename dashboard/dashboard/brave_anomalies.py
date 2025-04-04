@@ -14,6 +14,8 @@ from __future__ import absolute_import
 import logging
 import datetime
 
+from flask import request
+
 from google.appengine.ext import ndb
 from google.appengine.api import mail
 
@@ -73,6 +75,7 @@ def _SendEmail(subject):
   logging.info('Sent a mail to %s', emails)
 
 def MaybeSendEmail():
+  force = request.values.get('force') == 'true'
   now = datetime.datetime.now()
 
   new_count = _GetUntriagedAnomaliesCount(now - _NEW_CHECK_INTERVAL)
@@ -82,12 +85,11 @@ def MaybeSendEmail():
     return
 
   last_total_checked = stored_object.Get(_LAST_TOTAL_CHECK_KEY)
+  delta = _TOTAL_CHECK_INTERVAL
   if last_total_checked is not None:
     delta = now - last_total_checked
-  else:
-    delta = _TOTAL_CHECK_INTERVAL
   logging.info('Total check delta %s', delta)
-  if delta >= _TOTAL_CHECK_INTERVAL:
+  if delta >= _TOTAL_CHECK_INTERVAL or force:
     stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)
     total = _GetUntriagedAnomaliesCount(None)
     if total > 0:
