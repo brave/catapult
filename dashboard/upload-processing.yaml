@@ -13,7 +13,7 @@ automatic_scaling:
   # Define max_idle_instance to reduce the number of billed instance.
   max_idle_instances: 0
   # 8 worker * 10 threads = 80 concurrent requests.
-  max_concurrent_requests: 5
+  max_concurrent_requests: 80
   # Auto scaling will be triggered when reach 90% of the max concurrent.
   target_throughput_utilization: 0.90
   target_cpu_utilization: 0.90
