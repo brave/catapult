@@ -33,9 +33,10 @@ _LAST_TOTAL_CHECK_KEY = 'brave_anomaly_new_check_timestamp'
 _BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
 
 def GetBraveCoreRevision(row_tuples, revision_number):
-  for _, row, _ in row_tuples:
-    if row.revision == revision_number:
-      if hasattr(row, 'a_brave_tag') and row.a_brave_tag:
+  for revision, row, _ in row_tuples:
+    if revision == revision_number:
+      logging.info('GetBraveCoreRevision for %s: %s ', revision_number, row)
+      if hasattr(row, 'a_brave_tag'):
         return row.a_brave_tag
   return None
 

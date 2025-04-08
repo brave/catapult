@@ -421,8 +421,11 @@ def _MakeAnomalyEntity(change_point, test, stat, rows, config, matching_sub):
   bot_id_before = _GetBotIdForRevisionNumber(rows, change_point.extended_start)
   bot_id_after = _GetBotIdForRevisionNumber(rows, change_point.extended_end)
 
+  # TODO: usually null, fix it
   display_start = GetBraveCoreRevision(rows, change_point.extended_start)
   display_end = GetBraveCoreRevision(rows, change_point.extended_end)
+  if display_start is not None:
+    display_start = display_start + '+'
 
   bot_id_before_start_rev = _GetBotIdForRevisionNumber(rows, start_rev - 1)
   logging.debug('bot_id_before: %s, new_bot_id_before: %s, bot_id_after: %s',
