@@ -252,24 +252,6 @@ def _BraveProcessPoint(row_dict, point_info):
     if name.startswith('a_brave_'):
       point_info[name] = val
 
-  # Fallback options for the old formats. TODO: remove it after some time
-  if not 'a_brave_tag' in point_info:
-    # Option 1: parse brave tag from a_build_uri
-    build_uri = row_dict.get('a_build_uri')
-    if build_uri is not None:
-      build_uri = six.ensure_str(build_uri)
-      m = re.search(r'/tag/(v[\d|\.]+)\)', build_uri)
-      if m is not None:
-        point_info['a_brave_tag'] = six.ensure_binary(m.group(1))
-
-    # Option 2: parse data from r_v8_rev & r_webrtc_git
-    v8_rev = row_dict.get('r_v8_rev')
-    if v8_rev is not None and v8_rev.startswith(b'0.'):
-      point_info['a_brave_tag'] = b'v' + v8_rev[2:]
-    webrtc_git = row_dict.get('r_webrtc_git')
-    if webrtc_git is not None and webrtc_git.find(b'.') != -1:
-      point_info['r_brave_chrome'] = webrtc_git
-
   return point_info
 
 def _PointInfoDict(row, anomaly_annotation_map):
