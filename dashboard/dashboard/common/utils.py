@@ -481,12 +481,10 @@ def IsInternalUser():
   if cached is not None:
     return cached
   try:
+    logging.info('Checking IsInternalUser for client_id %s', email)
     is_internal_user = IsGroupMember(identity=email, group='chromeperf-access')
 
-    from dashboard.common import utils
-    from dashboard.api import api_auth
-    logging.info('Checking IsInternalUser for client_id %s', email)
-    if email.endswith('.gserviceaccount.com'):
+    if email.endswith('@brave-perf-dashboard.iam.gserviceaccount.com'):
       is_internal_user = True
 
     SetCachedIsInternalUser(email, is_internal_user)
