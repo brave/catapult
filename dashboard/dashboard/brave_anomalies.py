@@ -29,24 +29,6 @@ import dashboard.brave_sheriff_config_client as brave_sheriff
 _LAST_TOTAL_CHECK_KEY = 'brave_anomaly_new_check_timestamp'
 _BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
 
-def GetBraveCoreRevision(test_key, revision_number):
-  try:
-    row_parent_key = utils.GetTestContainerKey(test_key)
-    direct_row = graph_data.Row.get_by_id(revision_number, parent=row_parent_key)
-    if direct_row and hasattr(direct_row, 'a_brave_tag'):
-      return direct_row.a_brave_tag
-    else:
-      logging.warning('Empty brave tag for %s, %s, %s, %s', test_key, row_parent_key, revision_number, direct_row)
-  except Exception as e:
-    logging.warning('Error querying row %s, %s: %s', test_key, revision_number, e)
-  return None
-
-def FindBraveCoreRevision(row_tuples, revision_number):
-  for revision, row, _ in row_tuples:
-    if revision == revision_number:
-      return GetBraveCoreRevision(row.key, revision_number)
-  return None
-
 def _GetUntriagedAnomaliesCount(min_timestamp, max_timestamp):
   """Fetches recent untriaged anomalies asynchronously from all sheriffs."""
   # Previous code process anomalies by sheriff with LIMIT. It prevents some
