@@ -28,7 +28,7 @@ from dashboard.models import subscription
 from dashboard.services import perf_issue_service_client
 from dashboard.sheriff_config_client import GetSheriffConfigClient
 from tracing.value.diagnostics import reserved_infos
-from dashboard.brave_anomalies import GetBraveCoreRevision
+from dashboard.brave_anomalies import FindBraveCoreRevision
 
 # Number of points to fetch and pass to FindChangePoints. A different number
 # may be used if a test has a "max_window_size" anomaly config parameter.
@@ -421,11 +421,8 @@ def _MakeAnomalyEntity(change_point, test, stat, rows, config, matching_sub):
   bot_id_before = _GetBotIdForRevisionNumber(rows, change_point.extended_start)
   bot_id_after = _GetBotIdForRevisionNumber(rows, change_point.extended_end)
 
-  # TODO: usually null, fix it
-  display_start = GetBraveCoreRevision(rows, change_point.extended_start)
-  display_end = GetBraveCoreRevision(rows, change_point.extended_end)
-  if display_start is not None:
-    display_start = display_start + '+'
+  display_start = FindBraveCoreRevision(rows, change_point.extended_start)
+  display_end = FindBraveCoreRevision(rows, change_point.extended_end)
 
   bot_id_before_start_rev = _GetBotIdForRevisionNumber(rows, start_rev - 1)
   logging.debug('bot_id_before: %s, new_bot_id_before: %s, bot_id_after: %s',
