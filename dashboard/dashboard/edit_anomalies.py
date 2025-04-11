@@ -19,6 +19,7 @@ from dashboard.common import xsrf
 
 from flask import request, make_response
 
+from dashboard.brave_anomalies import GetBraveCoreRevision
 
 @xsrf.TokenRequired
 def EditAnomaliesPost():
@@ -163,6 +164,8 @@ def NudgeAnomalies(anomaly_entities, start, end):
   for a in anomaly_entities:
     a.start_revision = start
     a.end_revision = end
+    a.display_start = GetBraveCoreRevision(a.test, start - 1)
+    a.display_end = GetBraveCoreRevision(a.test, end)
 
   ndb.put_multi(anomaly_entities)
 
