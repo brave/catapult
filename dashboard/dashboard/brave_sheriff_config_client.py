@@ -72,6 +72,10 @@ _IGNORE_PATTERN = re.compile('|'.join([
   r'^([^/]+/){2}loading.[^/]+(/[^/]+){1,2}$',
 ]))
 
+_ONLINE_METRICS_PATTERN = re.compile('|'.join([
+  '^BravePerf/mac-mini-x64-online/',
+]))
+
 def _GetAnomalyConfigs(min_relative_change: float):
   config = subscription.AnomalyConfig()
   config.min_segment_size = 2
@@ -104,12 +108,12 @@ class BraveSheriffConfigClient(object):
     if _IGNORE_PATTERN.search(path) is not None:
       return [], None
 
-    if _TOP_STABLE_METRICS_PATTERN.search(path) is not None:
+    if (_TOP_STABLE_METRICS_PATTERN.search(path) is not None and
+        _ONLINE_METRICS_PATTERN.search(path) is None):
       return [_GetTopStableMetricsSubscription()], None
-    elif _TOP_METRICS_PATTERN.search(path) is not None:
+    if _TOP_METRICS_PATTERN.search(path) is not None:
       return [_GetTopMetricsSubscription()], None
-    else:
-      return [_GetOtherMetricsSubscription()], None
+    return [_GetOtherMetricsSubscription()], None
 
   def List(self, check=False):
     return [_GetTopMetricsSubscription(), _GetOtherMetricsSubscription()], None
