@@ -15,20 +15,22 @@ BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
 
 from dashboard.models import subscription
 
-# Metrics that are stable and tolerate to small min_relative_change.
-_TOP_STABLE_METRICS_PATTERN = re.compile('|'.join([
-    # Memory:
-    'reported_by_chrome:allocated_objects_size/',
+_METRICS_PATTERN_HALF_PERCENT = re.compile('|'.join([
+  # apk_size:
+  'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
 
-    # apk_size:
-    'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
-
-    # Process number
-    'ChildProcess.Launched.UtilityProcessHash#count',
-    'all_processes:process_count',
+  # Process number
+  'ChildProcess.Launched.UtilityProcessHash#count',
+  'all_processes:process_count',
 ]))
 
-_TOP_METRICS_PATTERN = re.compile('|'.join([
+# Metrics that are stable and tolerate to small min_relative_change.
+_METRICS_PATTERN_3_PERCENT = re.compile('|'.join([
+    # Memory:
+    'reported_by_chrome:allocated_objects_size/',
+]))
+
+_METRICS_PATTERN_5_PERCENT = re.compile('|'.join([
     # Memory:
     'reported_by_os:private_footprint_size/',
 
@@ -90,11 +92,8 @@ def _GetSubscription(name: str, min_relative_change: float):
                                    auto_triage_enable=True,
                                    auto_bisect_enable=False)
 
-def _GetTopStableMetricsSubscription():
-  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, 0.03)
-
-def _GetTopMetricsSubscription():
-  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, 0.05)
+def _GetTopMetricsSubscription(min_relative_change: float = 0.05):
+  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, min_relative_change)
 
 def _GetOtherMetricsSubscription():
   return _GetSubscription('Brave Sheriff', 0.05)
@@ -108,11 +107,14 @@ class BraveSheriffConfigClient(object):
     if _IGNORE_PATTERN.search(path) is not None:
       return [], None
 
-    if (_TOP_STABLE_METRICS_PATTERN.search(path) is not None and
-        _ONLINE_METRICS_PATTERN.search(path) is None):
-      return [_GetTopStableMetricsSubscription()], None
-    if _TOP_METRICS_PATTERN.search(path) is not None:
-      return [_GetTopMetricsSubscription()], None
+    if _ONLINE_METRICS_PATTERN.search(path) is None:  # online use < 5% accuracy
+      if _METRICS_PATTERN_HALF_PERCENT.search(path) is not None:
+        return [_GetTopMetricsSubscription(0.005)], None
+      if _METRICS_PATTERN_3_PERCENT.search(path) is not None:
+        return [_GetTopMetricsSubscription(0.03)], None
+
+    if _METRICS_PATTERN_5_PERCENT.search(path) is not None:
+      return [_GetTopMetricsSubscription(0.05)], None
     return [_GetOtherMetricsSubscription()], None
 
   def List(self, check=False):
