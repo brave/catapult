@@ -16,8 +16,8 @@ BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
 from dashboard.models import subscription
 
 _METRICS_PATTERN_HALF_PERCENT = re.compile('|'.join([
-  # apk_size:
-  'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
+  # apk total size:
+  'apk_size/(TransferSize|InstallSize)',
 
   # Process number
   'ChildProcess.Launched.UtilityProcessHash#count',
@@ -58,6 +58,9 @@ _METRICS_PATTERN_5_PERCENT = re.compile('|'.join([
     'timeToInteractive/',
     'timeToFirstMeaningfulPaint/',
     'cpuTimeToFirstMeaningfulPaint/',
+
+    # apk install breakdown:
+    'apk_size/InstallBreakdown',
 ]))
 
 _IGNORE_PATTERN = re.compile('|'.join([
