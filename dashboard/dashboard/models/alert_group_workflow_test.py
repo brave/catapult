@@ -488,7 +488,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
       self.assertIn(a, group.get().anomalies)
       self.assertEqual(group.get().bug.bug_id,
                        self._issue_tracker.add_comment_args[0])
-      self.assertIn('Added 2 regressions to the group',
+      self.assertIn('Reopened: Added 2 new regressions to the alert group',
                     self._issue_tracker.add_comment_kwargs['comment'])
     self.assertFalse(self._issue_tracker.add_comment_kwargs['send_email'])
 
@@ -824,7 +824,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertIn('[2] regressions',
                   self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
-        'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
+        'http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
 
   # === Delay Reporting ===
@@ -871,7 +871,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertIn('[2] regressions',
                   self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
-        'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
+        'http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
     self.assertIn(utils.DELAY_REPORTING_PLACEHOLDER,
                   self._issue_tracker.new_bug_kwargs['components'])
@@ -922,7 +922,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertIn('[2] regressions',
                   self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
-        'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
+        'http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
     self.assertNotIn(utils.DELAY_REPORTING_PLACEHOLDER,
                      self._issue_tracker.new_bug_kwargs['components'])
@@ -1043,7 +1043,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertIn('[2] regressions',
                   self._issue_tracker.new_bug_kwargs['title'])
     self.assertIn(
-        'Chromium Commit Position: http://test-results.appspot.com/revision_range?start=0&end=100',
+        'http://test-results.appspot.com/revision_range?start=0&end=100',
         self._issue_tracker.new_bug_kwargs['description'])
 
   def testTriage_GroupUntriaged_InfAnomaly(self):
@@ -2912,7 +2912,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(self._issue_tracker.calls[2]['args'][1], 'chromium')
     self.assertNotIn('was automatically merged into',
                      self._issue_tracker.calls[2]['kwargs']['comment'])
-    self.assertIn('Alert group updated:',
+    self.assertIn('Added 1 regressions to the group',
                   self._issue_tracker.calls[2]['kwargs']['comment'])
     self.assertEqual(
         self._issue_tracker.calls[2]['kwargs'], {
@@ -2982,7 +2982,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(self._issue_tracker.calls[1]['args'][1], 'chromium')
     self.assertNotIn('was automatically merged into',
                      self._issue_tracker.calls[1]['kwargs']['comment'])
-    self.assertIn('Alert group updated:',
+    self.assertIn('Added 1 regressions to the group',
                   self._issue_tracker.calls[1]['kwargs']['comment'])
     self.assertEqual(
         self._issue_tracker.calls[1]['kwargs'], {
@@ -3302,7 +3302,7 @@ class AlertGroupWorkflowTest(testing_common.TestCase):
     self.assertEqual(self._issue_tracker.calls[1]['method'], 'AddBugComment')
     self.assertEqual(len(self._issue_tracker.calls[1]['args']), 2)
     self.assertEqual(self._issue_tracker.calls[1]['args'][0], 42)
-    self.assertIn('Alert group updated:',
+    self.assertIn('Added 1 regressions to the group',
                   self._issue_tracker.calls[1]['kwargs']['comment'])
 
     self.assertIsNone(group.get().canonical_group)

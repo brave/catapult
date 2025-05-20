@@ -191,14 +191,15 @@ class BuganizerClient:
 
 
   def NewIssue(self,
-             title,
-             description,
-             project='chromium',
-             labels=None,
-             components=None,
-             owner=None,
-             cc=None,
-             status=None):
+               title,
+               description,
+               project='chromium',
+               labels=None,
+               components=None,
+               owner=None,
+               cc=None,
+               status=None,
+               formattingMode='MARKDOWN'):
     ''' Create an issue on Buganizer
 
     While the API looks the same as in monorail_client, similar to what we do
@@ -255,7 +256,8 @@ class BuganizerClient:
     }
 
     new_description = {
-      'comment': description
+        'comment': description,
+        'formattingMode': formattingMode,
     }
 
     if owner:
@@ -321,17 +323,18 @@ class BuganizerClient:
 
 
   def NewComment(self,
-                  issue_id,
-                  project='chromium',
-                  comment='',
-                  title=None,
-                  status=None,
-                  merge_issue=None,
-                  owner=None,
-                  cc=None,
-                  components=None,
-                  labels=None,
-                  send_email='True'):
+                 issue_id,
+                 project='chromium',
+                 comment='',
+                 title=None,
+                 status=None,
+                 merge_issue=None,
+                 owner=None,
+                 cc=None,
+                 components=None,
+                 labels=None,
+                 send_email='True',
+                 formattingMode='MARKDOWN'):
     ''' Add a new comment for an existing issue
 
     Adding a new comment using the same set of arguments as in Monorail.
@@ -527,7 +530,10 @@ class BuganizerClient:
 
     modify_request = {}
     if comment:
-      modify_request['issueComment'] = {'comment': comment}
+      modify_request['issueComment'] = {
+          'comment': comment,
+          'formattingMode': formattingMode,
+      }
     if add_issue_state:
       modify_request['addMask'] = ','.join(add_issue_state.keys())
       modify_request['add'] = add_issue_state

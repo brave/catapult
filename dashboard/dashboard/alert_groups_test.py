@@ -1018,9 +1018,8 @@ class RecoveredAlertsTests(GroupReportTestBase):
     logging.debug('Rendered:\n%s',
                   self.fake_issue_tracker.add_comment_kwargs['comment'])
     self.assertEqual(self.fake_issue_tracker.issue["state"], 'open')
-    self.assertRegex(
-        self.fake_issue_tracker.add_comment_kwargs['comment'],
-        r'Reopened due to new regressions detected for this alert group:')
+    self.assertRegex(self.fake_issue_tracker.add_comment_kwargs['comment'],
+                     r'Reopened: Added 1 new regressions to the alert group')
     self.assertRegex(self.fake_issue_tracker.add_comment_kwargs['comment'],
                      r'test_suite/measurement/other_test_case')
 
