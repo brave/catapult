@@ -67,6 +67,7 @@ class Result(object):
                  artifacts=None,
                  in_memory_text_artifacts=None,
                  failure_reason=None,
+                 skipped_reason=None,
                  associated_bugs=''):
         self.name = name
         self.actual = actual
@@ -87,6 +88,7 @@ class Result(object):
         self.line_number = line_number
         self.failure_reason = failure_reason
         self.associated_bugs = associated_bugs
+        self.skipped_reason = skipped_reason
         self.result_sink_retcode = 0
 
 

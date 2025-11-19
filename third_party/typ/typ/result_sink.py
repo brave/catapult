@@ -306,7 +306,7 @@ class ResultSinkReporter(object):
         return self._report_result(
                 test_id, test_name_prefix, status, result_is_expected, artifacts, tag_list,
                 html_summary, result.took, test_metadata, result.failure_reason,
-                properties)
+                result.skipped_reason, properties)
 
     @contextlib.contextmanager
     def batch_results(self):
@@ -343,7 +343,7 @@ class ResultSinkReporter(object):
 
     def _report_result(
             self, test_id, test_name_prefix, status, expected, artifacts, tag_list, html_summary,
-            duration, test_metadata, failure_reason, properties):
+            duration, test_metadata, failure_reason, skipped_reason, properties):
         """Reports a single test result to ResultSink.
 
         Args:
@@ -375,8 +375,8 @@ class ResultSinkReporter(object):
         # look up the correct component for bug filing.
         test_result = _create_json_test_result(
                 test_id, test_name_prefix, status, expected, artifacts, tag_list, html_summary,
-                duration, test_metadata, failure_reason, properties,
-                self._module_scheme)
+                duration, test_metadata, failure_reason, skipped_reason,
+                properties, self._module_scheme)
 
         if self._pending_results:
             self._pending_results.add(test_result)
@@ -446,8 +446,8 @@ class ResultSinkError(Exception):
 
 def _create_json_test_result(
         test_id, test_name_prefix, status, expected, artifacts, tag_list, html_summary,
-        duration, test_metadata, failure_reason, properties=None,
-        module_scheme=None):
+        duration, test_metadata, failure_reason, skipped_reason=None,
+        properties=None, module_scheme=None):
     """Formats data to be suitable for sending to ResultSink.
 
     Args:
@@ -513,6 +513,11 @@ def _create_json_test_result(
                 failure_reason.primary_error_message, 1024)
         test_result['failureReason'] = {
                 'primaryErrorMessage': primary_error_message,
+        }
+    if skipped_reason:
+        test_result['skippedReason'] = {
+            'kind': 'OTHER',
+            'reasonMessage': skipped_reason,
         }
 
     if properties:

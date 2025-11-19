@@ -877,7 +877,7 @@ class ResultSinkReporterTest(unittest.TestCase):
             self.assertEqual(rsr._report_result(
                     'test_id', '', json_results.ResultType.Pass, True, {}, {},
                     '<pre>summary</pre>', 1, {}, failure_reason=None,
-                    properties=None), 0, {})
+                    properties=None, skipped_reason=None), 0, {})
         finally:
             result_sink._create_json_test_result = original_function
 
@@ -888,38 +888,50 @@ class ResultSinkReporterTest(unittest.TestCase):
 
     def testCreateJsonTestResultBasic(self):
         retval = result_sink._create_json_test_result(
-            'test_id', 'test_prefix.', json_results.ResultType.Failure, True,
-            {'artifact': {'filePath': 'somepath'}},
-            [('tag_key', 'tag_value')], '<pre>summary</pre>', 1,
-            {'name': 'test_name', 'location': {'repo': 'a repo'}},
-            json_results.FailureReason('got "foo", want "bar"'))
-        self.assertEqual(retval, {
-            'testId': 'test_id',
-            'status': json_results.ResultType.Failure,
-            'expected': True,
-            'duration': '1.000000000s',
-            'summaryHtml': '<pre>summary</pre>',
-            'artifacts': {
-                'artifact': {
-                    'filePath': 'somepath',
+            'test_id',
+            'test_prefix.',
+            json_results.ResultType.Failure,
+            True,
+            {'artifact': {
+                'filePath': 'somepath'
+            }}, [('tag_key', 'tag_value')],
+            '<pre>summary</pre>',
+            1, {'name': 'test_name',
+                'location': {
+                    'repo': 'a repo'
+                }},
+            json_results.FailureReason('got "foo", want "bar"'),
+            skipped_reason='test skip reason')
+        self.assertEqual(
+            retval, {
+                'testId': 'test_id',
+                'status': json_results.ResultType.Failure,
+                'expected': True,
+                'duration': '1.000000000s',
+                'summaryHtml': '<pre>summary</pre>',
+                'artifacts': {
+                    'artifact': {
+                        'filePath': 'somepath',
+                    },
                 },
-            },
-            'tags': [
-                {
+                'tags': [{
                     'key': 'tag_key',
                     'value': 'tag_value',
+                },],
+                'testMetadata': {
+                    'name': 'test_name',
+                    'location': {
+                        'repo': 'a repo',
+                    },
                 },
-            ],
-            'testMetadata': {
-                'name': 'test_name',
-                'location': {
-                    'repo': 'a repo',
+                'failureReason': {
+                    'primaryErrorMessage': 'got "foo", want "bar"',
                 },
-            },
-            'failureReason': {
-                'primaryErrorMessage': 'got "foo", want "bar"',
-            },
-        })
+                'skippedReason': {
+                    'kind': 'OTHER',
+                    'reasonMessage': 'test skip reason',
+                },
+            })
 
     def testCreateJsonWithVerySmallDuration(self):
         retval = result_sink._create_json_test_result(
