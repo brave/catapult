@@ -67,6 +67,7 @@ _GERRIT_CHANGE_INFO = {
                                    'Change-Id: I0123456789abcdef\n',
         },
     },
+    'status': 'NEW'
 }
 
 
@@ -98,6 +99,23 @@ class GerritPatchTest(test.TestCase):
         'patch_ref': 'refs/changes/77/658277/5',
         'patch_repository_url': 'https://googlesource.com/chromium/src',
         'patch_set': 5,
+        'patch_storage': 'gerrit',
+    }
+    self.assertEqual(p.BuildParameters(), expected)
+
+  def testBuildParametersMerged(self):
+    merged_change_info = dict(_GERRIT_CHANGE_INFO)
+    merged_change_info['status'] = 'MERGED'
+    self.get_change.return_value = merged_change_info
+
+    p = Patch('current revision')
+    expected = {
+        'patch_gerrit_url': 'https://codereview.com',
+        'patch_issue': 658277,
+        'patch_project': 'chromium/src',
+        'patch_ref': 'refs/changes/77/658277/4',
+        'patch_repository_url': 'https://googlesource.com/chromium/src',
+        'patch_set': 4,
         'patch_storage': 'gerrit',
     }
     self.assertEqual(p.BuildParameters(), expected)

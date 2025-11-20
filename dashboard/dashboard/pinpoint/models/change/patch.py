@@ -41,7 +41,7 @@ class GerritPatch(
     patch_info = gerrit_service.GetChange(
         self.server, self.change, fields=('ALL_REVISIONS',))
     revision_info = patch_info['revisions'][self.revision]
-    return {
+    patch_params = {
         'patch_gerrit_url': self.server,
         'patch_issue': patch_info['_number'],
         'patch_project': patch_info['project'],
@@ -50,6 +50,19 @@ class GerritPatch(
         'patch_set': revision_info['_number'],
         'patch_storage': 'gerrit',
     }
+    if patch_info['status'] == 'MERGED':
+      # workaround for b/460800062
+      # if the patch CL is merged, we should use the patchset before
+      # auto rebase.
+      patch_ref_pieces = revision_info['fetch']['http']['ref'].split('/')
+      patch_set = revision_info['_number']
+      if len(patch_ref_pieces) > 1 and int(
+          patch_ref_pieces[-1]) == patch_set and patch_set > 1:
+        new_patch_set = patch_set - 1
+        patch_ref_pieces[-1] = str(new_patch_set)
+        patch_params['patch_ref'] = '/'.join(patch_ref_pieces)
+        patch_params['patch_set'] = new_patch_set
+    return patch_params
 
   @property
   def hostname(self):
