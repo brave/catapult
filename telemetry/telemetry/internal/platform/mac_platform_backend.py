@@ -47,8 +47,8 @@ class MacPlatformBackend(posix_platform_backend.PosixPlatformBackend):
     # print the CPU info. It could be like:
     #  For arm: Apple M4 Pro
     #  For intel: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-    cpu_brand_string = str(
-        self.RunCommand(['sysctl', '-n', 'machdep.cpu.brand_string']))
+    cpu_brand_string = self.RunCommand(
+        ['sysctl', '-n', 'machdep.cpu.brand_string']).decode("utf-8")
     cpu_info_pieces = cpu_brand_string.split()
     if not cpu_brand_string.startswith('Apple'):
       brand_piece = cpu_info_pieces[0]
