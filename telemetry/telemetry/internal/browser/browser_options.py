@@ -297,6 +297,10 @@ class BrowserFinderOptions(argparse.Namespace):
                        'running 20+ benchmarks much faster (especially on '
                        'android where UpdateExecutableIfNeeded can take '
                        'minutes).')
+    group.add_argument('--do-not-store-tombstones',
+                       action='store_false',
+                       dest='store_tombstones',
+                       help='Do not store tombstones from an Android device.')
 
     # Cast browser options
     group = parser.add_argument_group('Cast browser options')
