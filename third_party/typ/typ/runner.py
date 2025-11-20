@@ -1351,7 +1351,6 @@ def _result_from_test_result(test_result, test_name, started, took, out, err,
                              in_memory_text_artifacts,
                              associated_bugs):
     failure_reason = None
-    skipped_reason = None
     if test_result.failures:
         actual = ResultType.Failure
         code = 1
@@ -1370,8 +1369,7 @@ def _result_from_test_result(test_result, test_name, started, took, out, err,
                 failure_reason = _failure_reason_from_traceback(error[1])
     elif test_result.skipped:
         actual = ResultType.Skip
-        skipped_reason = test_result.skipped[0][1]
-        err = err + skipped_reason
+        err = err + test_result.skipped[0][1]
         code = 0
         if has_expectations:
             unexpected = actual not in expected_results
@@ -1396,8 +1394,7 @@ def _result_from_test_result(test_result, test_name, started, took, out, err,
     return Result(test_name, actual, started, took, worker_num,
                   expected_results, unexpected, flaky, code, out, err, pid,
                   test_location, test_line, artifacts,
-                  in_memory_text_artifacts, failure_reason=failure_reason,
-                  skipped_reason=skipped_reason, associated_bugs=associated_bugs)
+                  in_memory_text_artifacts, failure_reason, associated_bugs)
 
 
 def _failure_reason_from_traceback(traceback):
