@@ -86,15 +86,14 @@ def GetTestResultFromPostedJson(json_string):
 
 
 def CreateExpectedTestResult(
-        test_id=None, test_name=None, status=None, expected=None, duration=None,
-        summary_html=HTML_SUMMARY, artifacts=None, tags=None, test_metadata=None,
-        primary_error_message=None):
+        test_id=None, test_name=None, status='PASSED', failure_kind=None,
+        duration=None, summary_html=HTML_SUMMARY, artifacts=None, tags=None,
+        test_metadata=None, primary_error_message=None):
     test_id = test_id or 'test_name_prefix.test_name'
     test_name = test_name or 'test_name'
     result = {
         'testId': test_id,
-        'status': status or json_results.ResultType.Pass,
-        'expected': expected if expected is not None else True,
+        'statusV2': status,
         'duration': duration or '1.000000000s',
         'summaryHtml': summary_html,
         'artifacts': artifacts or STDOUT_STDERR_ARTIFACTS,
@@ -113,10 +112,14 @@ def CreateExpectedTestResult(
             }
         },
     }
-    if primary_error_message:
+    if failure_kind:
         result['failureReason'] = {
-            'primaryErrorMessage': primary_error_message,
+            'kind': failure_kind,
         }
+        if primary_error_message:
+          result['failureReason']['errors'] = [{
+                'message': primary_error_message,
+          }]
     return result
 
 
@@ -222,7 +225,8 @@ class ResultSinkReporterTest(unittest.TestCase):
                 result, ARTIFACT_DIR, CreateTestExpectations(), FAKE_TEST_PATH,
                 FAKE_TEST_LINE, 'test_name_prefix.')
         self.assertEqual(retval, 2)
-        expected_result = CreateExpectedTestResult(status='ABORT', expected=False)
+        expected_result = CreateExpectedTestResult(status='FAILED',
+                                                   failure_kind='TIMEOUT')
         self.assertEqual(GetTestResultFromPostedJson(rsr._post.args[1]),
                          expected_result)
 
@@ -239,8 +243,8 @@ class ResultSinkReporterTest(unittest.TestCase):
                 result, ARTIFACT_DIR, CreateTestExpectations(), FAKE_TEST_PATH,
                 FAKE_TEST_LINE, 'test_name_prefix.')
         self.assertEqual(retval, 0)
-        expected_result = CreateExpectedTestResult(status='ABORT',
-                                                   expected=False)
+        expected_result = CreateExpectedTestResult(status='FAILED',
+                                                   failure_kind='TIMEOUT')
         self.assertIn(output_filepath, self._host.files)
         self.assertEqual(json.loads(self._host.files[output_filepath]),
                          expected_result)
@@ -262,8 +266,8 @@ class ResultSinkReporterTest(unittest.TestCase):
                 result, ARTIFACT_DIR, CreateTestExpectations(), FAKE_TEST_PATH,
                 FAKE_TEST_LINE, 'test_name_prefix.')
         self.assertEqual(retval, 0)
-        expected_result = CreateExpectedTestResult(status='ABORT',
-                                                   expected=False)
+        expected_result = CreateExpectedTestResult(status='FAILED',
+                                                   failure_kind='TIMEOUT')
         self.assertIn(output_filepath, self._host.files)
         got_results = [json.loads(
                 x) for x in self._host.files[output_filepath].rstrip(
@@ -293,10 +297,20 @@ class ResultSinkReporterTest(unittest.TestCase):
                 FAKE_TEST_LINE, 'test_name_prefix.')
             self.assertEqual(status2, 0)
 
+            result3 = CreateResult({
+                'name': 'test_name',
+                'actual': json_results.ResultType.Crash,
+            })
+            status3 = rsr.report_individual_test_result(
+                result3, ARTIFACT_DIR, CreateTestExpectations(), FAKE_TEST_PATH,
+                FAKE_TEST_LINE, 'test_name_prefix.')
+            self.assertEqual(status3, 0)
+
         results = json.loads(rsr._post.args[1])['testResults']
         self.assertEqual(results, [
-            CreateExpectedTestResult(status='ABORT', expected=False),
-            CreateExpectedTestResult(status='FAIL', expected=False),
+            CreateExpectedTestResult(status='FAILED', failure_kind='TIMEOUT'),
+            CreateExpectedTestResult(status='FAILED', failure_kind='ORDINARY'),
+            CreateExpectedTestResult(status='FAILED', failure_kind='CRASH'),
         ])
 
     def testBatchResultsFailure(self):
@@ -366,8 +380,8 @@ class ResultSinkReporterTest(unittest.TestCase):
                 FAKE_TEST_LINE, 'test_name_prefix.')
         self.assertEqual(retval, 2)
         expected_result = CreateExpectedTestResult(
-                status=json_results.ResultType.Failure,
-                expected=False,
+                status='FAILED',
+                failure_kind='ORDINARY',
                 primary_error_message='Got "foo", want "bar"')
         self.assertEqual(GetTestResultFromPostedJson(rsr._post.args[1]),
                          expected_result)
@@ -888,15 +902,20 @@ class ResultSinkReporterTest(unittest.TestCase):
 
     def testCreateJsonTestResultBasic(self):
         retval = result_sink._create_json_test_result(
-            'test_id', 'test_prefix.', json_results.ResultType.Failure, True,
+            'a/b/c.html?d', '', json_results.ResultType.Failure, True,
             {'artifact': {'filePath': 'somepath'}},
             [('tag_key', 'tag_value')], '<pre>summary</pre>', 1,
             {'name': 'test_name', 'location': {'repo': 'a repo'}},
-            json_results.FailureReason('got "foo", want "bar"'))
+            json_results.FailureReason('got "foo", want "bar"'),
+            module_scheme=result_sink.ModuleScheme.WEBTEST)
         self.assertEqual(retval, {
-            'testId': 'test_id',
-            'status': json_results.ResultType.Failure,
-            'expected': True,
+            'testId': 'a/b/c.html?d',
+            'testIdStructured': {
+                'caseNameComponents': ['c.html?d'],
+                'coarseName': None,
+                'fineName': 'a/b',
+            },
+            'statusV2': 'PASSED',
             'duration': '1.000000000s',
             'summaryHtml': '<pre>summary</pre>',
             'artifacts': {
@@ -916,8 +935,12 @@ class ResultSinkReporterTest(unittest.TestCase):
                     'repo': 'a repo',
                 },
             },
-            'failureReason': {
-                'primaryErrorMessage': 'got "foo", want "bar"',
+            # Ensure the original status is preserved for web tests.
+            'frameworkExtensions': {
+                'webTest': {
+                    'isExpected': True,
+                    'status': 'FAIL',
+                },
             },
         })
 

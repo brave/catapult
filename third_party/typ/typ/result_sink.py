@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import sys
+from typing import Any, Dict, Optional
 
 # The requests module is only needed if we actually need to talk to a sink.
 try:
@@ -39,23 +40,13 @@ from typ import host as typ_host
 from typ import json_results
 from typ import expectations_parser
 
-# Map JSON result types to ResultDB statuses. Currently, this is an identity map
-# except for `TIMEOUT`, which maps to ResultDB's more general `ABORT`. See also:
-#   https://chromium.googlesource.com/chromium/src/+/HEAD/docs/testing/json_test_results_format.md#test-result-types
-#   https://source.chromium.org/chromium/infra/infra/+/master:go/src/go.chromium.org/luci/resultdb/proto/v1/test_result.proto
-_JSON_TO_RESULTDB_STATUSES = {
-    json_results.ResultType.Pass: 'PASS',
-    json_results.ResultType.Failure: 'FAIL',
-    json_results.ResultType.Crash: 'CRASH',
-    json_results.ResultType.Timeout: 'ABORT',
-    json_results.ResultType.Skip: 'SKIP',
-}
-VALID_STATUSES = set(_JSON_TO_RESULTDB_STATUSES.values())
+
 STDOUT_KEY = 'typ_stdout'
 STDERR_KEY = 'typ_stderr'
 # From https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/pbutil/strpair.go;l=28
 MAX_TAG_LENGTH = 256
 SHA1_HEX_HASH_LENGTH = 40
+
 
 # These are the names of the ResultDB schemes.
 class ModuleScheme(enum.Enum):
@@ -302,11 +293,10 @@ class ResultSinkReporter(object):
         if test_file_line is not None:
             test_metadata['location'].update({'line': test_file_line})
 
-        status = _JSON_TO_RESULTDB_STATUSES.get(result.actual, result.actual)
         return self._report_result(
-                test_id, test_name_prefix, status, result_is_expected, artifacts, tag_list,
-                html_summary, result.took, test_metadata, result.failure_reason,
-                properties)
+                test_id, test_name_prefix, result.actual, result_is_expected,
+                artifacts, tag_list, html_summary, result.took, test_metadata,
+                result.failure_reason, properties)
 
     @contextlib.contextmanager
     def batch_results(self):
@@ -350,7 +340,7 @@ class ResultSinkReporter(object):
             test_id: A string containing the unique identifier of the test.
             test_name_prefix: A string that was added to the test_id.
             status: A string containing the status of the test. Must be in
-                    |VALID_STATUSES|.
+                    `ResultType`.
             expected: A boolean denoting whether |status| is expected or not.
             artifacts: A dict of artifact names (strings) to dicts, specifying
                     either a filepath or base64-encoded artifact content.
@@ -454,7 +444,7 @@ def _create_json_test_result(
         test_id: A string containing the unique identifier of the test.
         test_name_prefix: A string of the prefix added to tests.
         status: A string containing the status of the test. Must be in
-                |VALID_STATUSES|.
+                `ResultType`.
         expected: A boolean denoting whether |status| is expected or not.
         artifacts: A dict of artifact names (strings) to dicts, specifying
                 either a filepath or base64-encoded artifact content.
@@ -474,15 +464,13 @@ def _create_json_test_result(
         A dict containing the provided data in a format that is ingestable by
         ResultSink.
     """
-    if status not in VALID_STATUSES:
-        raise ValueError('Status %r is not in the VALID_STATUSES list' % status)
+    if status not in json_results.ResultType.values:
+        raise ValueError(f'{status!r} is not a valid `ResultType`')
 
     # This is based off the protobuf in
-    # https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/sink/proto/v1/test_result.proto
+    # https://source.chromium.org/chromium/infra/infra_superproject/+/main:infra/go/src/go.chromium.org/luci/resultdb/proto/v1/failure_reason.proto
     test_result = {
             'testId': test_id,
-            'status': status,
-            'expected': expected,
             # If the number is too large or small, python formats the number
             # in scientific notation, but google.protobuf.duration doesn't
             # accept an input formatted in scientific notation.
@@ -495,6 +483,14 @@ def _create_json_test_result(
             'tags': [],
             'testMetadata': test_metadata,
     }
+    _add_status_with_reasons(test_result, status, expected, failure_reason)
+    if module_scheme is ModuleScheme.WEBTEST:
+        test_result['frameworkExtensions'] = {
+            'webTest': {
+                'isExpected': expected,
+                'status': status,
+            },
+        }
 
     result_dict = _create_test_id_struct_dict(test_id, module_scheme)
     if result_dict:
@@ -506,19 +502,55 @@ def _create_json_test_result(
     if test_id.startswith('gpu_tests.'):
       test_result['tags'].append({'key': 'gpu_test_class', 'value': test_name_prefix.rstrip('.') })
 
-    # This is based off the protobuf in
-    # https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/proto/v1/failure_reason.proto
-    if failure_reason:
-        primary_error_message = _truncate_to_utf8_bytes(
-                failure_reason.primary_error_message, 1024)
-        test_result['failureReason'] = {
-                'primaryErrorMessage': primary_error_message,
-        }
-
     if properties:
         test_result['properties'] = properties
 
     return test_result
+
+
+def _add_status_with_reasons(
+        test_result: Dict[str, Any],
+        status: str,
+        expected: bool,
+        failure_reason: Optional[json_results.FailureReason]):
+    if expected:
+        if status == json_results.ResultType.Skip:
+            status_v2 = 'SKIPPED'
+            # ResultDB requires a skipped reason message to be uploaded for all
+            # skipped tests.
+            test_result['skippedReason'] = {
+                'kind': 'OTHER',
+                # TODO(crbug.com/410893293): Let the `ResultSinkReporter` client
+                # specify a custom reason.
+                'reasonMessage': 'Skipped for an unknown reason',
+            }
+        else:
+            # Expected failure, timeout, crash, pass all represent logically
+            # "passing" tests.
+            status_v2 = 'PASSED'
+    else:
+        if status == json_results.ResultType.Skip:
+            status_v2 = 'EXECUTION_ERRORED'
+        else:
+            # Unexpected pass, failure, crash and timeout represent logically
+            # "failing" tests.
+            status_v2 = 'FAILED'
+            kind = 'ORDINARY'
+            if status is json_results.ResultType.Crash:
+                kind = 'CRASH'
+            elif status is json_results.ResultType.Timeout:
+                kind = 'TIMEOUT'
+            # This is based off the protobuf in
+            # https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/proto/v1/failure_reason.proto
+            test_result['failureReason'] = {
+                'kind': kind,
+            }
+            if failure_reason:
+                message = _truncate_to_utf8_bytes(
+                    failure_reason.primary_error_message, 1024)
+                test_result['failureReason']['errors'] = [{'message': message}]
+
+    test_result['statusV2'] = status_v2
 
 
 def result_sink_retcode_from_result_set(result_set):
