@@ -5,6 +5,7 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+import copy
 from dashboard.services import gerrit_service
 
 from dashboard.pinpoint.models.change import patch
@@ -69,12 +70,19 @@ _GERRIT_CHANGE_INFO = {
     },
     'status': 'NEW'
 }
+_MERGED_CHANGE_INFO = copy.deepcopy(_GERRIT_CHANGE_INFO)
+_MERGED_CHANGE_INFO['status'] = 'MERGED'
 
 
 class GerritPatchTest(test.TestCase):
 
   def setUp(self):
     super().setUp()
+    self.get_change.return_value = _GERRIT_CHANGE_INFO
+
+  def tearDown(self):
+    super().tearDown()
+    # reset the default
     self.get_change.return_value = _GERRIT_CHANGE_INFO
 
   def testPatch(self):
@@ -103,10 +111,7 @@ class GerritPatchTest(test.TestCase):
     }
     self.assertEqual(p.BuildParameters(), expected)
 
-  def testBuildParametersMerged(self):
-    merged_change_info = dict(_GERRIT_CHANGE_INFO)
-    merged_change_info['status'] = 'MERGED'
-    self.get_change.return_value = merged_change_info
+    self.get_change.return_value = copy.deepcopy(_MERGED_CHANGE_INFO)
 
     p = Patch('current revision')
     expected = {
@@ -119,6 +124,18 @@ class GerritPatchTest(test.TestCase):
         'patch_storage': 'gerrit',
     }
     self.assertEqual(p.BuildParameters(), expected)
+
+  def testBuildsetTags(self):
+    p = Patch('current revision')
+    expected = 'buildset:patch/gerrit/codereview.com/658277/5'
+    self.assertEqual(p.BuildsetTags(), expected)
+
+  def testBuildsetTagsMerged(self):
+    self.get_change.return_value = copy.deepcopy(_MERGED_CHANGE_INFO)
+
+    p = Patch('current revision')
+    expected = 'buildset:patch/gerrit/codereview.com/658277/4'
+    self.assertEqual(p.BuildsetTags(), expected)
 
   def testAsDict(self):
     p = Patch('current revision')
