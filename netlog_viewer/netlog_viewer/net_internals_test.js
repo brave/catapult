@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+'use strict';
+
 /**
  * @fileoverview The way these tests work is as follows:
  * C++ in net_internals_ui_browsertest.cc does any necessary setup, and then
@@ -270,6 +272,7 @@ var NetInternalsTest = (function() {
       timeline: TimelineView.TAB_ID,
       dns: DnsView.TAB_ID,
       sockets: SocketsView.TAB_ID,
+      streamPool: StreamPoolView.TAB_ID,
       http2: SpdyView.TAB_ID,
       'alt-svc': AltSvcView.TAB_ID,
       quic: QuicView.TAB_ID,

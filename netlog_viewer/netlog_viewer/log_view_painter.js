@@ -783,6 +783,13 @@ let proxySettingsToString;
     // We enumerate these to a list so we can later number them.
     const modes = [];
 
+    // Output override rules before other modes.
+    if (config.override_rules) {
+      modes.push([
+        'Override rules:',
+        ...JSON.stringify(config.override_rules, null, 2).split('\n')]);
+    }
+
     // Output any automatic settings.
     if (config.auto_detect) {
       modes.push(['Auto-detect']);
