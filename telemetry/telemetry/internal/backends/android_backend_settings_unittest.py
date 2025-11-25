@@ -29,13 +29,6 @@ class AndroidBackendSettingsUnittest(unittest.TestCase):
         backends.ANDROID_CHROME.GetApkName(device),
         'Chrome.apk')
 
-  def testMonochromeApkOnNougat(self):
-    device = mock.Mock()
-    device.build_version_sdk = version_codes.NOUGAT
-    self.assertEqual(
-        backends.ANDROID_CHROME.GetApkName(device),
-        'Monochrome.apk')
-
   def testSystemWebViewApkOnMarshmallow(self):
     device = mock.Mock()
     device.build_version_sdk = version_codes.MARSHMALLOW
@@ -43,26 +36,12 @@ class AndroidBackendSettingsUnittest(unittest.TestCase):
         backends.ANDROID_WEBVIEW.GetApkName(device),
         'SystemWebView.apk')
 
-  def testMonochromePublicApkOnNougat(self):
-    device = mock.Mock()
-    device.build_version_sdk = version_codes.NOUGAT
-    self.assertEqual(
-        backends.ANDROID_WEBVIEW.GetApkName(device),
-        'MonochromePublic.apk')
-
   def testSystemWebViewGoogleApkOnMarshmallow(self):
     device = mock.Mock()
     device.build_version_sdk = version_codes.MARSHMALLOW
     self.assertEqual(
         backends.ANDROID_WEBVIEW_GOOGLE.GetApkName(device),
         'SystemWebViewGoogle.apk')
-
-  def testMonochromeApkForWebViewOnNougat(self):
-    device = mock.Mock()
-    device.build_version_sdk = version_codes.NOUGAT
-    self.assertEqual(
-        backends.ANDROID_WEBVIEW_GOOGLE.GetApkName(device),
-        'Monochrome.apk')
 
   @mock.patch('telemetry.internal.backends.'
               'android_browser_backend_settings.util.FindLatestApkOnHost')
