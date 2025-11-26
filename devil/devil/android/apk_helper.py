@@ -252,6 +252,19 @@ class BaseApkHelper(object):
         return self._ResolveName(activity.name)
     return None
 
+  def GetActivityNamesWithCategory(self, category_name):
+    """
+    Returns a list of exported activity names with the specified Intent
+    category.
+    """
+    manifest_info = self._GetManifest()
+    activity_names = []
+
+    for activity in _IterateExportedActivities(manifest_info):
+      if category_name in activity.categories:
+        activity_names.append(self._ResolveName(activity.name))
+    return activity_names
+
   def GetViewActivityName(self):
     """Returns name of the first action=View Activity that can handle http."""
     manifest_info = self._GetManifest()
