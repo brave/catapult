@@ -170,7 +170,7 @@ class Forwarder(object):
           try:
             instance._KillDeviceLocked(device, tool)
           except (device_errors.CommandFailedError,
-                  device_errors.DeviceUnreachableError):
+                  device_errors.DeviceUnreachableError) as e:
             # We don't want the failure to kill the device forwarder to
             # supersede the original failure to map.
             logger.warning(
