@@ -247,14 +247,15 @@ found in the LICENSE file.
                 // The default project is Chromium.
                 continue;
               }
-              notesList.push(`${key} argument is not supported at this time!`);
+              notesList.push(
+                `Command Line Repro does not support the ${key} argument.`);
               break;
           }
         }
         let idx = argsList.length - 1;
         argsList[idx] = argsList[idx].replace(' \\', '');
         if (notesList.length > 0) {
-          argsList = argsList.concat('*** Notes:', notesList);
+          argsList = argsList.concat('\n*** Notes:', notesList);
         }
         return argsList;
       }
