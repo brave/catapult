@@ -858,7 +858,7 @@ class BrowserOptions():
     """
     consolidated_args = []
     found_values = []
-    for arg in self.extra_browser_args:
+    for arg in self._extra_browser_args:
       if '=' in arg and arg.split('=', 1)[0] == flag:
         # Syntax is `--flag=A,B`.
         # Support for the `--flag A,B` syntax isn't present since the extra
