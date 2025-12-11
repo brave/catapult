@@ -882,9 +882,16 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
         likely explanation is that the devtool's target crashed.
     """
     if isinstance(error, inspector_websocket.WebSocketException):
-      new_error = exceptions.TimeoutException()
-      new_error.AddDebuggingMessage(exceptions.AppCrashException(
-          self.app, 'The app is probably crashed:\n'))
+      if issubclass(error.websocket_error_type,
+                    websocket.WebSocketConnectionClosedException):
+        # We assume that a prematurely closed websocket connection means that
+        # the target crashed.
+        new_error = exceptions.DevtoolsTargetCrashException(self.app)
+      else:
+        new_error = exceptions.TimeoutException()
+        new_error.AddDebuggingMessage(
+            exceptions.AppCrashException(self.app,
+                                         'The app is probably crashed:\n'))
     else:
       new_error = exceptions.DevtoolsTargetCrashException(self.app)
 
