@@ -356,6 +356,15 @@ class BaseApkHelper(object):
     except KeyError:
       return None
 
+  def GetIsDebuggable(self):
+    """Returns the value of android:debuggable or False if not available."""
+    manifest_info = self._GetManifest()
+    try:
+      application = manifest_info['manifest'][0]['application'][0]
+      return _ParseNumericKey(application, 'android:debuggable') != 0
+    except KeyError:
+      return False
+
   def GetVersionCode(self):
     """Returns the versionCode as an integer, or None if not available."""
     manifest_info = self._GetManifest()
