@@ -57,7 +57,8 @@ STDERR_KEY = 'typ_stderr'
 MAX_TAG_LENGTH = 256
 SHA1_HEX_HASH_LENGTH = 40
 
-# These are the names of the ResultDB schemes.
+# These are the names of the ResultDB schemes that the typ runner currently
+# expects to encounter.
 class ModuleScheme(enum.Enum):
     FLAT = 'flat'
     PYUNIT = 'pyunit'
@@ -541,46 +542,54 @@ def _create_test_id_struct_dict(test_id, module_scheme):
         'caseNameComponents': None,
     }
 
+    # In a few instances, a test execution call (such as presubmit tests)
+    # runs tests that have multiple schemes. As only one module
+    # scheme can be specified when the tests are executed, the environment
+    # variable allows a specific scheme to be set.
+    env_module_scheme = os.environ.get('RESULTDB_MODULE_SCHEME')
+    if env_module_scheme:
+        module_scheme = ModuleScheme(env_module_scheme)
+
     # Most of the tests should by pyunit.
     if not module_scheme:
-      module_scheme = ModuleScheme.PYUNIT
-      if 'webgpu' in test_id and ':' in test_id:
-        module_scheme = ModuleScheme.WEBGPUCTS
-      elif test_id.startswith('gpu_tests.'):
-        module_scheme = ModuleScheme.FLAT
+        module_scheme = ModuleScheme.PYUNIT
+        if 'webgpu' in test_id and ':' in test_id:
+            module_scheme = ModuleScheme.WEBGPUCTS
+        elif test_id.startswith('gpu_tests.'):
+            module_scheme = ModuleScheme.FLAT
 
     if module_scheme == ModuleScheme.WEBTEST:
-      test_split = test_id.rsplit('/', 1)
-      fine_name = test_split[0] if len(test_split) > 1 else '/'
-      case_name = test_split[1] if len(test_split) > 1 else test_split[0]
-      struct_test_dict['fineName'] =  fine_name
-      struct_test_dict['caseNameComponents'] = [case_name]
+        test_split = test_id.rsplit('/', 1)
+        fine_name = test_split[0] if len(test_split) > 1 else '/'
+        case_name = test_split[1] if len(test_split) > 1 else test_split[0]
+        struct_test_dict['fineName'] =  fine_name
+        struct_test_dict['caseNameComponents'] = [case_name]
     elif module_scheme == ModuleScheme.WEBGPUCTS:
-      # gpu_tests take the form of:
-      # gpu_tests.WebGpu.{suite}:{path,to,file}:{test,test}:{param=}
-      # the parameters can also have ':' so cannot use rsplit.
-      test_split =  test_id.split(':', 3)
-      suite = test_split[0].split('.')[-1]
-      struct_test_dict['coarseName'] =  '%s:%s' % (suite, test_split[1])
-      struct_test_dict['fineName'] =  test_split[2]
-      if len(test_split) <= 3 or not test_split[3]:
-        params = 'single_case'
-      else:
-        params = test_split[3]
+        # gpu_tests take the form of:
+        # gpu_tests.WebGpu.{suite}:{path,to,file}:{test,test}:{param=}
+        # the parameters can also have ':' so cannot use rsplit.
+        test_split =  test_id.split(':', 3)
+        suite = test_split[0].split('.')[-1]
+        struct_test_dict['coarseName'] =  '%s:%s' % (suite, test_split[1])
+        struct_test_dict['fineName'] =  test_split[2]
+        if len(test_split) <= 3 or not test_split[3]:
+            params = 'single_case'
+        else:
+            params = test_split[3]
 
-      struct_test_dict['caseNameComponents'] = [params]
+        struct_test_dict['caseNameComponents'] = [params]
     elif module_scheme == ModuleScheme.PYUNIT:
-      test_split = test_id.rsplit('.', 2)
-      if len(test_split) != 3:
-        return None
+        test_split = test_id.rsplit('.', 2)
+        if len(test_split) != 3:
+            return None
 
-      struct_test_dict['coarseName'] =  test_split[0]
-      struct_test_dict['fineName'] =  test_split[1]
-      struct_test_dict['caseNameComponents'] = [test_split[2]]
+        struct_test_dict['coarseName'] =  test_split[0]
+        struct_test_dict['fineName'] =  test_split[1]
+        struct_test_dict['caseNameComponents'] = [test_split[2]]
     elif module_scheme == ModuleScheme.FLAT:
-      struct_test_dict['caseNameComponents'] = [test_id]
+        struct_test_dict['caseNameComponents'] = [test_id]
     else:
-      return None
+        return None
 
     return struct_test_dict
 
