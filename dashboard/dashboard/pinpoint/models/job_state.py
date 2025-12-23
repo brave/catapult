@@ -227,6 +227,17 @@ class JobState:
 
     return work_left
 
+  def Fail(self):
+    if self._comparison_mode != TRY:
+      return
+    for attempts in self._attempts.values():
+      for attempt in attempts:
+        if attempt.completed:
+          logging.debug('CascadeCancel: No need. %s', attempt)
+          continue
+        logging.debug('CascadeCancel: Failing: %s', attempt)
+        attempt.Fail()
+
   def _RaiseErrorIfAllAttemptsFailed(self):
     counter = collections.Counter()
     for attempts in self._attempts.values():

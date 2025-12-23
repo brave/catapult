@@ -151,3 +151,10 @@ class Execution:
     self._completed = True
     self._result_values = result_values
     self._result_arguments = result_arguments or {}
+
+  def Cancel(self):
+    self._Cancel()
+
+  def _Cancel(self):
+    logging.debug('CascadeCancel: Not implemented for %s.',
+                  self.__class__.__name__)

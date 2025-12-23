@@ -192,6 +192,12 @@ class _FindIsolateExecution(execution.Execution):
 
     self._RequestBuild()
 
+  def _Cancel(self):
+    logging.debug('CascadeCancel: Canceling buildbucket build %s for %s.',
+                  self._build, self.build_tags.get('pinpoint_job_id'))
+    buildbucket_service.CancelBuild(self._build,
+                                    self.build_tags.get('pinpoint_job_id'))
+
   def _CheckIsolateCache(self, builder_name_override=''):
     """Checks the isolate cache to see if a build is already available.
 

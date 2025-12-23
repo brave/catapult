@@ -945,6 +945,9 @@ class Job(ndb.Model):
     if not self.cancelled:
       self._PrintJobStatusRunTimeMetrics("failed", True)
 
+      if self._IsTryJob():
+        self.state.Fail()
+
       comment = '\n'.join((title, '', exc_message))
 
       deferred.defer(
