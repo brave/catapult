@@ -7,7 +7,7 @@ from telemetry.core import exceptions
 from telemetry.testing import browser_test_case
 
 
-UNCLOSEABLE_URLS = ['chrome://reload-button']
+UNCLOSEABLE_URLS = ['chrome://webui-toolbar.top-chrome']
 
 
 class TabTestCase(browser_test_case.BrowserTestCase):
