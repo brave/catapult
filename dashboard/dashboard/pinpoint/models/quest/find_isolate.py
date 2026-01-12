@@ -326,7 +326,12 @@ def RequestBuild(builder_name, change, bucket, build_tags, task=None):
 
   patch = change_module.GerritPatch.FromUrl(review_url)
 
-  change_info = gerrit_service.GetChange(base_review_url, patch.change)
+  try:
+    change_info = gerrit_service.GetChange(base_review_url, patch.change)
+  except gerrit_service.NotFoundError as e:
+    logging.warning('Gerrit change is not found: %s', str(e))
+    reason = 'BUILD_FAILURE'
+    raise errors.BuildFailedFatal(reason)
 
   commit_url_parts = urlparse.urlparse(base_as_dict['url'])
 
