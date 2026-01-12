@@ -56,6 +56,10 @@ class Browser(app.App):
       raise
 
   @property
+  def browser_backend(self):
+    return self._browser_backend
+
+  @property
   def browser_type(self):
     return self.app_type
 
