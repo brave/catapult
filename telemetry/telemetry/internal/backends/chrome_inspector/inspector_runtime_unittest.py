@@ -91,11 +91,24 @@ class InspectorRuntimeTest(tab_test_case.TabTestCase):
     self.assertEqual(TestVar(host_context), 'host')
 
     # Access the iframes without guarantees on which order they loaded.
-    iframe1 = TestVar(context_id=all_contexts_list[1])
-    iframe2 = TestVar(context_id=all_contexts_list[2])
-    iframe3 = TestVar(context_id=all_contexts_list[3])
-    self.assertEqual({iframe1, iframe2, iframe3},
-                     {'iframe1', 'iframe2', 'iframe3'})
+    def CollectIframeVarsWhenReady():
+      found = set()
+      for context_id in all_contexts_list[1:]:
+        try:
+          if self._tab.EvaluateJavaScript("typeof(testVar) != 'undefined'",
+                                          context_id=context_id):
+            found.add(
+                self._tab.EvaluateJavaScript("testVar", context_id=context_id))
+        except exceptions.EvaluateException:
+          pass
+      return found if len(found) == 3 else None
+
+    # Wait until we have found 3 distinct values (iframe1, iframe2, iframe3).
+    # We iterate over all available contexts because there might be extra
+    # contexts (e.g. from an IPH bubble) that we should ignore if they don't
+    # have testVar defined.
+    found_vars = py_utils.WaitFor(CollectIframeVarsWhenReady, timeout=10)
+    self.assertEqual(found_vars, {'iframe1', 'iframe2', 'iframe3'})
 
     # Accessing a non-existent iframe throws an exception.
     self.assertRaises(
