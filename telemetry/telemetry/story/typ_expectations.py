@@ -25,6 +25,8 @@ ResultType = json_results.ResultType
 # expectations.config stay in sync.
 SYSTEM_CONDITION_TAGS = frozenset([
     'android',
+    'android-corsola',
+    'android-nissa',
     'android-go',
     'android-low-end',
     'android-nexus-5',
@@ -55,6 +57,13 @@ SYSTEM_CONDITION_TAGS = frozenset([
     'mac',
     'mac-10.12',
     'mac-10.13',
+    # chips for different Mac models
+    'intel',
+    'm1',
+    'm2',
+    'm3',
+    'm4',
+    'm5',
     'win',
     'win10',
     'win7',

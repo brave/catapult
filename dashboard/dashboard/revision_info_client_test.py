@@ -62,7 +62,8 @@ class RevisionInfoClient(testing_common.TestCase):
     self.assertEqual(info, [{
         'url': 'http://test-results.appspot.com/revision_range'
                '?start=99&end=200&n=1000',
-        'name': 'Chromium Commit Position'
+        'name': 'Chromium Commit Position',
+        'range': '99..200'
     }])
 
   def testGetRangeRevisionInfo_Suffixed(self):
@@ -73,7 +74,8 @@ class RevisionInfoClient(testing_common.TestCase):
     self.assertEqual(info, [{
         'url': 'http://test-results.appspot.com/revision_range'
                '?start=99&end=200&n=1000',
-        'name': 'Chromium Commit Position'
+        'name': 'Chromium Commit Position',
+        'range': '99..200'
     }])
 
   def testGetRangeRevisionInfo_NotFound(self):

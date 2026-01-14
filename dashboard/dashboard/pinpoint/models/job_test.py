@@ -33,27 +33,25 @@ from six.moves import zip # pylint: disable=redefined-builtin
 # pylint: disable=too-many-lines
 
 _CHROMIUM_URL = 'https://chromium.googlesource.com/chromium/src'
-_COMMENT_STARTED = (u"""\U0001f4cd Pinpoint job started.
-https://testbed.example.com/job/1""")
+_COMMENT_STARTED = (
+    u"""\U0001f4cd Pinpoint job started: https://testbed.example.com/job/1""")
 
 _COMMENT_COMPLETED_NO_COMPARISON = (
-    u"""<b>\U0001f4cd Job complete. See results below.</b>
-https://testbed.example.com/job/1""")
+    u"""\U0001f4cd Job complete: https://testbed.example.com/job/1""")
 
 _COMMENT_COMPLETED_NO_DIFFERENCES = (
-    u"""<b>\U0001f4cd Couldn't reproduce a difference.</b>
-https://testbed.example.com/job/1""")
+    u"""\U0001f4cd Couldn't reproduce a difference: https://testbed.example.com/job/1"""
+)
 
 _COMMENT_COMPLETED_NO_DIFFERENCES_DUE_TO_FAILURE = (
-    u"""<b>\U0001f63f Job finished with errors.</b>
-https://testbed.example.com/job/1
+    u"""\U0001f63f Job finished with errors: https://testbed.example.com/job/1
 
 One or both of the initial changes failed to produce any results.
 Perhaps the job is misconfigured or the tests are broken? See the job
 page for details.""")
 
-_COMMENT_FAILED = (u"""\U0001f63f Pinpoint job stopped with an error.
-https://testbed.example.com/job/1
+_COMMENT_FAILED = (
+    u"""\U0001f63f Pinpoint job stopped with an error: https://testbed.example.com/job/1
 
 Error string""")
 
@@ -421,7 +419,7 @@ class BugCommentTest(test.TestCase):
         'chromium',
         comment=_COMMENT_STARTED,
         labels=mock.ANY,
-        send_email=True)
+        send_email=False)
     labels = self.add_bug_comment.call_args[1]['labels']
     self.assertIn('Pinpoint-Job-Started', labels)
     self.assertNotIn('-Pinpoint-Job-Started', labels)
@@ -437,6 +435,7 @@ class BugCommentTest(test.TestCase):
         'chromium',
         comment=_COMMENT_COMPLETED_NO_COMPARISON,
         labels=['Pinpoint-Tryjob-Completed'],
+        send_email=True,
     )
 
   def testCompletedNoDifference(self):
@@ -450,6 +449,7 @@ class BugCommentTest(test.TestCase):
         'chromium',
         comment=_COMMENT_COMPLETED_NO_DIFFERENCES,
         labels=mock.ANY,
+        send_email=True,
         status='WontFix',
     )
     labels = self.add_bug_comment.call_args[1]['labels']
@@ -473,7 +473,8 @@ class BugCommentTest(test.TestCase):
         123456,
         'chromium',
         comment=_COMMENT_COMPLETED_NO_DIFFERENCES_DUE_TO_FAILURE,
-        labels=mock.ANY)
+        labels=mock.ANY,
+        send_email=True)
     labels = self.add_bug_comment.call_args[1]['labels']
     self.assertIn('Pinpoint-Job-Failed', labels)
     self.assertNotIn('-Pinpoint-Job-Failed', labels)
@@ -511,7 +512,7 @@ class BugCommentTest(test.TestCase):
         merge_issue=None)
     message = self.add_bug_comment.call_args.kwargs['comment']
     self.assertIn('Found a significant difference at 1 commit.', message)
-    self.assertIn('<b>Subject.</b>', message)
+    self.assertIn('Subject.', message)
     self.assertIn('https://example.com/repository/+/git_hash', message)
     labels = self.add_bug_comment.call_args.kwargs['labels']
     self.assertIn('Pinpoint-Culprit-Found', labels)
@@ -614,7 +615,7 @@ class BugCommentTest(test.TestCase):
         merge_issue=None)
     message = self.add_bug_comment.call_args.kwargs['comment']
     self.assertIn('Found a significant difference at 1 commit.', message)
-    self.assertIn('<b>Subject.</b>', message)
+    self.assertIn('Subject.', message)
     self.assertIn('https://example.com/repository/+/git_hash', message)
     labels = self.add_bug_comment.call_args.kwargs['labels']
     self.assertIn('Pinpoint-Culprit-Found', labels)
@@ -1342,6 +1343,69 @@ class BugCommentTest(test.TestCase):
     post_change_comment.assert_called_once_with(
         'https://review.com', '123456',
         _COMMENT_GERRIT_UPDATE % (expected_bot, expected_benchmark))
+
+  @mock.patch('dashboard.services.gerrit_service.PostChangeComment')
+  def testCompletedDoesNotUpdatesGerritForCQ(self, post_change_comment):
+    expected_bot = 'linux-perf'
+    expected_benchmark = 'speedometer2'
+    j = job.Job.New((), (),
+                    arguments={
+                        'configuration': expected_bot,
+                        'benchmark': expected_benchmark,
+                    },
+                    gerrit_server='https://review.com',
+                    gerrit_change_id='123456',
+                    tags={'origin': 'CQ'})
+    scheduler.Schedule(j)
+    j.Run()
+    self.ExecuteDeferredTasks('default')
+    post_change_comment.assert_not_called()
+
+  @mock.patch('dashboard.pinpoint.models.change.Commit.AsDict')
+  @mock.patch('dashboard.pinpoint.models.sandwich_workflow_group.CloudWorkflow')
+  @mock.patch('dashboard.services.workflow_service.CreateExecution',
+              mock.MagicMock(return_value='test-workflow-execution-name'))
+  def testStartSandwich_CommitDictContainsCLNumber(self, mock_cloud_workflow,
+                                                   mock_as_dict):
+    j = job.Job.New(
+        (), (),
+        arguments={
+            'benchmark': 'speedometer2',
+            'configuration': 'linux-perf',
+            'story': 'some-story',
+            'chart': 'Total'
+        },
+        bug_id=123456)
+
+    mock_as_dict.return_value = {
+        'repository':
+            'chromium',
+        'git_hash':
+            'git_hash_1',
+        'review_url':
+            'https://chromium-review.googlesource.com/c/chromium/src/+/987654'
+    }
+
+    mock_cloud_workflow.return_value.put.return_value.id.return_value = 999
+
+    c0 = change.Change((change.Commit('chromium', 'git_hash_0'),))
+    c1 = change.Change((change.Commit('chromium', 'git_hash_1'),))
+    differences = [(c0, c1)]
+    result_values = {c0: [0], c1: [10]}
+
+    j._StartSandwichAndUpdateWorkflowGroup(anomaly.DOWN, differences,
+                                           result_values)
+
+    call_args = mock_cloud_workflow.call_args
+    self.assertIsNotNone(call_args, "CloudWorkflow constructor was not called.")
+
+    commit_dict = call_args.kwargs.get('commit_dict')
+    self.assertIsNotNone(commit_dict)
+
+    self.assertEqual(commit_dict.get('cl_number'), '987654')
+
+    self.assertEqual(commit_dict.get('git_hash'), 'git_hash_1')
+    self.assertEqual(commit_dict.get('repository'), 'chromium')
 
 @mock.patch('dashboard.services.swarming.GetAliveBotsByDimensions',
             mock.MagicMock(return_value=["a"]))

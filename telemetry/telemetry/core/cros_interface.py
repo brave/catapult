@@ -15,6 +15,8 @@ _CHROME_MOUNT_NAMESPACE_PATH = "/run/namespaces/mnt_chrome"
 _IGNORE_FILETYPES_FOR_MINIDUMP_PULLS = (
     linux_based_interface._IGNORE_FILETYPES_FOR_MINIDUMP_PULLS)
 
+_UI_START_TIMEOUT_S = 120
+
 
 DNSFailureException = linux_based_interface.DNSFailureException
 KeylessLoginRequiredException = (
@@ -201,9 +203,13 @@ class CrOSInterface(linux_based_interface.LinuxBasedInterface):
       restart_cmd.insert(0, 'systemctl')
 
     if self.IsServiceRunning('ui'):
-      self.RunCmdOnDevice(restart_cmd)
+      logging.info('crbug.com/449866954: Running restart command %s',
+                   restart_cmd)
+      self.RunCmdOnDevice(restart_cmd, timeout=_UI_START_TIMEOUT_S)
     else:
-      self.RunCmdOnDevice(start_cmd)
+      logging.info('crbug.com/449866954: Running start command %s', start_cmd)
+      self.RunCmdOnDevice(start_cmd, timeout=_UI_START_TIMEOUT_S)
+    logging.info('crbug.com/449866954: Done restarting UI')
 
   def _DisableRootFsVerification(self):
     """Disables rootfs verification on the device, requiring a reboot."""

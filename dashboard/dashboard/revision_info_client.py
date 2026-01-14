@@ -39,15 +39,17 @@ def GetRangeRevisionInfo(test_key, start, end):
   revision_info = GetRevisionInfoConfig()
   # Start position is the first commit position in the revision range. So the
   # position before start is the one we want.
-  revision_start = GetRevisions(test_key, start - 1)
-  revision_end = GetRevisions(test_key, end)
+  revision_starts = GetRevisions(test_key, start - 1)
+  revision_ends = GetRevisions(test_key, end)
   infos = []
   for k, info in revision_info.items():
-    if k not in revision_start or k not in revision_end:
+    if k not in revision_starts or k not in revision_ends:
       continue
     url = info.get('url', '')
-    info['url'] = url.replace(
-        '{{R1}}', six.ensure_str(revision_start[k])).replace(
-            '{{R2}}', six.ensure_str(revision_end[k])).replace('{{n}}', '1000')
+    start = revision_starts[k]
+    end = revision_ends[k]
+    info['url'] = url.replace('{{R1}}', six.ensure_str(start)).replace(
+        '{{R2}}', six.ensure_str(end)).replace('{{n}}', '1000')
+    info['range'] = "%s..%s" % (start, end)
     infos.append(info)
   return infos

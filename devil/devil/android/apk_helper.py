@@ -252,6 +252,19 @@ class BaseApkHelper(object):
         return self._ResolveName(activity.name)
     return None
 
+  def GetActivityNamesWithCategory(self, category_name):
+    """
+    Returns a list of exported activity names with the specified Intent
+    category.
+    """
+    manifest_info = self._GetManifest()
+    activity_names = []
+
+    for activity in _IterateExportedActivities(manifest_info):
+      if category_name in activity.categories:
+        activity_names.append(self._ResolveName(activity.name))
+    return activity_names
+
   def GetViewActivityName(self):
     """Returns name of the first action=View Activity that can handle http."""
     manifest_info = self._GetManifest()
@@ -343,6 +356,15 @@ class BaseApkHelper(object):
     except KeyError:
       return None
 
+  def GetIsDebuggable(self):
+    """Returns the value of android:debuggable or False if not available."""
+    manifest_info = self._GetManifest()
+    try:
+      application = manifest_info['manifest'][0]['application'][0]
+      return _ParseNumericKey(application, 'android:debuggable') != 0
+    except KeyError:
+      return False
+
   def GetVersionCode(self):
     """Returns the versionCode as an integer, or None if not available."""
     manifest_info = self._GetManifest()
@@ -430,20 +452,16 @@ class BaseApkHelper(object):
       path_tokens = path.split('/')
       if len(path_tokens) >= 2 and path_tokens[0] == 'lib':
         libs.add(path_tokens[1])
-    lib_to_abi = {
-        abis.ARM: [abis.ARM, abis.ARM_64],
-        abis.ARM_64: [abis.ARM_64],
-        abis.X86: [abis.X86, abis.X86_64],
-        abis.X86_64: [abis.X86_64]
-    }
-    try:
-      output = set()
-      for lib in libs:
-        for abi in lib_to_abi[lib]:
-          output.add(abi)
-      return sorted(output)
-    except KeyError:
-      raise ApkHelperError('Unexpected ABI in lib/* folder.')
+
+    # Define the set of allowed ABIs
+    allowed_abis = {abis.ARM, abis.ARM_64, abis.X86, abis.X86_64}
+
+    # Confirm that all found libs are within the allowed ABIs
+    for lib in libs:
+      if lib not in allowed_abis:
+        raise ApkHelperError(f'Unexpected ABI "{lib}" in lib/* folder.')
+
+    return sorted(libs)
 
   def GetApkPaths(self,
                   device,

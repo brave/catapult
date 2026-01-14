@@ -74,6 +74,7 @@ class TestCase(testing_common.TestCase):
                                        'Change-Id: I0123456789abcdef',
             },
         },
+        'status': 'NEW',
     }
 
   def _PopulateData(self):

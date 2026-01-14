@@ -17,9 +17,9 @@ def GetAndroidTarget(bot_name, err):
   # Each Android binary has its own target, and different bots use different
   # binaries. Mapping based off of Chromium's
   # //tools/perf/core/perf_data_generator.py
-  if bot_name in ['android-go-perf', 'android-go-perf-pgo']:
-    return 'performance_test_suite_android_clank_monochrome'
-  if bot_name in ['android-go-wembley-perf']:
+  if bot_name in [
+      'android-go-perf', 'android-go-perf-pgo', 'android-go-wembley-perf'
+  ]:
     return 'performance_test_suite_android_trichrome_chrome_google_bundle'
   if bot_name in [
       'android-pixel4-perf',
@@ -32,6 +32,8 @@ def GetAndroidTarget(bot_name, err):
       'android-pixel9-pro-perf',
       'android-pixel9-pro-xl-perf',
       'android-pixel-fold-perf',
+      'android-pixel-tangor-perf',
+      'android-pixel-tangor-perf-cbb',
   ]:
     return 'performance_test_suite_android_trichrome_chrome_google_64_32_bundle'
   if 'android' in bot_name.lower():

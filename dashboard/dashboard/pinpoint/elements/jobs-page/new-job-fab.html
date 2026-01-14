@@ -196,7 +196,7 @@ found in the LICENSE file.
               <div class="column rightPad">
                 <autocomplete-box id="botDropdown"
                                   name="configuration"
-                                  items="{{arrayToAutocompleteList(config.configurations)}}"
+                                  items="{{arrayToAutocompleteList(_filteredConfigurations)}}"
                                   disabled="[[!validConfig(config)]]"
                                   placeholder="Bot"
                                   selected-name="{{configuration}}"
@@ -208,7 +208,7 @@ found in the LICENSE file.
               <div class="column">
                 <autocomplete-box id="benchmarkDropdown"
                                   name="benchmark"
-                                  items="{{arrayToAutocompleteList(testSuites)}}"
+                                  items="{{arrayToAutocompleteList(_combinedBenchmarks)}}"
                                   disabled="[[!validTestSuites(testSuites)]]"
                                   placeholder="Benchmark"
                                   selected-name="{{benchmark}}"
@@ -226,7 +226,7 @@ found in the LICENSE file.
                                   items="{{storyCases(benchmarkConfig)}}"
                                   placeholder="Story"
                                   selected-name="{{story}}"
-                                  required$="[[!isStoryOrTagsSet(story, storyTags)]]"></autocomplete-box>
+                                  required$="[[_isStoryRequired(story, storyTags, benchmark)]]"></autocomplete-box>
                 <template is="dom-if" if="[[benchmarkConfigLoading]]">
                   <paper-progress indeterminate></paper-progress>
                 </template>
@@ -237,7 +237,7 @@ found in the LICENSE file.
                                   items="{{storyTagsFromConfig(benchmarkConfig)}}"
                                   placeholder="Story Tags (optional, comma-separated)"
                                   selected-name="{{storyTags}}"
-                                  required$="[[!isStoryOrTagsSet(story, storyTags)]]"></autocomplete-box>
+                                  required$="[[_isStoryRequired(story, storyTags, benchmark)]]"></autocomplete-box>
                 <template is="dom-if" if="[[benchmarkConfigLoading]]">
                   <paper-progress indeterminate></paper-progress>
                 </template>
@@ -398,6 +398,33 @@ found in the LICENSE file.
   <script>
     'use strict';
 
+    // TODO(eduardoyap): Fetch this list from the backend rather than hardcoding it.
+    const _CROSSBENCH_LIST = [
+      'jetstream2.crossbench',
+      'jetstream2.0.crossbench',
+      'jetstream2.1.crossbench',
+      'jetstream2.2.crossbench',
+      'jetstream-main.crossbench',
+      'motionmark1.0.crossbench',
+      'motionmark1.1.crossbench',
+      'motionmark1.2.crossbench',
+      'motionmark1.3.crossbench',
+      'motionmark1.3.1.crossbench',
+      'speedometer2.crossbench',
+      'speedometer2.0.crossbench',
+      'speedometer2.1.crossbench',
+      'speedometer3.crossbench',
+      'speedometer3.a11y.crossbench',
+      'speedometer3.0.crossbench',
+      'speedometer3.1.crossbench',
+      'speedometer-main.crossbench',
+      'loadline_phone.crossbench',
+      'loadline_phone2.crossbench',
+      'loadline_tablet.crossbench',
+      'embedder.crossbench',
+      'loading.crossbench',
+    ];
+
     const _NON_TELEMETRY_TARGETS = ['vr_common_perftests', 'webrtc_perf_tests'];
 
     const _STATISTICS = ['avg', 'count', 'max', 'min', 'std', 'sum'];
@@ -440,6 +467,14 @@ found in the LICENSE file.
           value: 'commit'
         },
         config: Object,
+        _combinedBenchmarks: {
+          type: Array,
+          computed: '_computeCombinedBenchmarks(testSuites)',
+        },
+        _filteredConfigurations: {
+          type: Array,
+          computed: '_computeFilteredConfigs(config.configurations)'
+        },
         configuration: String,
         configLoading: {
           type: Boolean,
@@ -502,6 +537,35 @@ found in the LICENSE file.
         'commitSourceChangedExp(commitSourceExp)'
       ],
 
+      _computeCombinedBenchmarks: function(testSuites) {
+        if (!testSuites) testSuites = [];
+        return testSuites.concat(_CROSSBENCH_LIST)
+      },
+
+      isCrossbenchBenchmark: function(benchmark) {
+        return _CROSSBENCH_LIST.includes(benchmark);
+      },
+
+      _isStoryRequired: function(story, storyTags, benchmark) {
+        if (this.isCrossbenchBenchmark(benchmark)) {
+          return false;
+        }
+
+        return !this.isStoryOrTagsSet(story, storyTags);
+      },
+
+      _computeFilteredConfigs: function(configurations) {
+        // Return an empty array if the input isn't ready yet
+        if (!configurations || configurations.length === 0) {
+          return [];
+        }
+
+        // CQ configurations which we don't want end users to use.
+        return configurations.filter(function(configName) {
+          return !configName.endsWith('perf-cq');
+        });
+      },
+
       openDialog() {
         this.client.open_dialog = () => {
           this.$.try_dialog.open();
@@ -527,8 +591,7 @@ found in the LICENSE file.
 
       preSubmit(event) {
         const invalidBenchmark = !this.validBenchmark(this.benchmark);
-        const invalidStory = !this.validStoryAndStoryTag(
-            this.story, this.storyTags);
+        const invalidStory = !this.validStoryAndStoryTag(this.story, this.storyTags, this.benchmark);
         const invalidBot = !this.validBot(this.configuration);
         // workaround for crbug/1466719. Benchmark and story data is
         // not properly uploaded to Datastore for Pinpoint staging.
@@ -774,6 +837,9 @@ found in the LICENSE file.
         if (!benchmark) {
           return false;
         }
+        if (this.isCrossbenchBenchmark(benchmark)) {
+          return true;
+        }
         if (this.testSuites) {
           return this.testSuites.includes(benchmark);
         }
@@ -823,7 +889,10 @@ found in the LICENSE file.
         return this.arrayToAutocompleteList(s.concat(_STATISTICS));
       },
 
-      validStoryAndStoryTag(story, storyTag) {
+      validStoryAndStoryTag(story, storyTag, benchmark) {
+        if (this.isCrossbenchBenchmark(benchmark)) {
+          return true;
+        }
         if (!story) {
           return this.validStoryTag(storyTag);
         }
@@ -906,9 +975,9 @@ found in the LICENSE file.
           return 'vr_perf_tests';
         }
         if (configuration === 'android-go-perf') {
-          return 'performance_test_suite_android_clank_monochrome';
+          return 'performance_test_suite_android_trichrome_chrome_google_bundle';
         } else if (configuration === 'android-go-perf-pgo') {
-          return 'performance_test_suite_android_clank_monochrome';
+          return 'performance_test_suite_android_trichrome_chrome_google_bundle';
         } else if (configuration === 'android-go-wembley-perf') {
           return 'performance_test_suite_android_trichrome_chrome_google_bundle';
         } else if (configuration === 'android-pixel4-perf') {
@@ -922,6 +991,8 @@ found in the LICENSE file.
         } else if (configuration === 'android-pixel-fold-perf') {
           return 'performance_test_suite_android_trichrome_chrome_google_64_32_bundle'
         } else if (configuration === 'android-pixel-tangor-perf') {
+          return 'performance_test_suite_android_trichrome_chrome_google_64_32_bundle'
+        } else if (configuration === 'android-pixel-tangor-perf-cbb') {
           return 'performance_test_suite_android_trichrome_chrome_google_64_32_bundle'
         } else if (configuration.toLowerCase().includes('android')) {
           throw Error(

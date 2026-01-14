@@ -1,0 +1,14 @@
+{% if skia_urls_text_internal -%}
+Internal (Googlers-only) Reports:
+{%- for url_text in skia_urls_text_internal %}
+- {{ url_text }}
+{%- endfor -%}
+{% endif %}
+
+{% if skia_urls_text_public -%}
+Public Reports:
+{%- for url_text in skia_urls_text_public %}
+- {{ url_text }}
+{%- endfor -%}
+{% endif %}
+- [Legacy Chromeperf](https://chromeperf.appspot.com/group_report?group_id={{ group.key.string_id() }})

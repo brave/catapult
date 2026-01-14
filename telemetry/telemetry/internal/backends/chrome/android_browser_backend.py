@@ -375,6 +375,8 @@ class AndroidBrowserBackend(chrome_browser_backend.ChromeBrowserBackend):
     artifact_logger.CreateArtifact(artifact_name, symbolized_logcat)
 
   def _StoreTombstonesAsArtifact(self, suffix):
+    if not self._finder_options.store_tombstones:
+      return
     tombstones = self.platform_backend.GetTombstones()
     if tombstones is None:
       tombstones = 'Failed to get tombstones. Is the script available?'

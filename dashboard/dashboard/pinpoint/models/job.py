@@ -24,6 +24,7 @@ from dashboard import pinpoint_request
 from dashboard.common import cloud_metric
 from dashboard.common import datastore_hooks
 from dashboard.common import sandwich_allowlist
+from dashboard.common import utils
 from dashboard.models import anomaly
 from dashboard.models import graph_data
 from dashboard.pinpoint.models import change as change_module
@@ -39,6 +40,7 @@ from dashboard.pinpoint.models import task as task_module
 from dashboard.pinpoint.models import timing_record
 from dashboard.pinpoint.models.evaluators import job_serializer
 from dashboard.pinpoint.models.tasks import evaluator as task_evaluator
+from dashboard.services import buildbucket_service
 from dashboard.services import gerrit_service
 from dashboard.services import perf_issue_service_client
 from dashboard.services import swarming
@@ -48,6 +50,15 @@ from dashboard.services import workflow_service
 # We want this to be fast to minimize overhead while waiting for tasks to
 # finish but don't want to consume too many resources.
 _TASK_INTERVAL = 60
+
+# We want Pinpoint jobs for perf-on-cq to progress in a faster rate.
+# The size of the job on CQ is manageable that:
+#  - it is try job with only two branches.
+#  - each branch runs for 16 iterations.
+# Reducing the interval from 60 to 40 will potentially increase the queue's
+# throughput by 50%. I'm increasing the instances count form 10 to 20 to
+# handler the increased workloads.
+_TASK_INTERVAL_CQ = 40
 
 _CRYING_CAT_FACE = u'\U0001f63f'
 _INFINITY = u'\u221e'
@@ -61,6 +72,8 @@ OPTION_STATE = 'STATE'
 OPTION_TAGS = 'TAGS'
 OPTION_ESTIMATE = 'ESTIMATE'
 OPTION_INPUTS = 'INPUTS'
+
+_JOB_ORIGIN_CQ = 'CQ'
 
 COMPARISON_MODES = job_state.COMPARISON_MODES
 
@@ -127,7 +140,7 @@ def IsDone(job_id):
     raise
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def MarkDone(job_id):
   """Transactionally update the job as done.
 
@@ -143,7 +156,7 @@ def MarkDone(job_id):
   return True
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def UpdateTime(job_id):
   """Transactionally updates the updated propery of a job."""
   job = JobFromId(job_id)
@@ -277,6 +290,8 @@ class Job(ndb.Model):
 
   # Bots we can use to run tests
   bots = ndb.StringProperty(repeated=True)
+
+  culprits = ndb.StringProperty(repeated=True)
 
   @classmethod
   def _post_get_hook(cls, key, future):  # pylint: disable=unused-argument
@@ -428,7 +443,7 @@ class Job(ndb.Model):
         self.bug_id,
         self.project,
         comment=bug_update.comment_text,
-        send_email=True,
+        send_email=False,
         _retry_options=RETRY_OPTIONS)
 
   @property
@@ -545,15 +560,14 @@ class Job(ndb.Model):
         self.benchmark_arguments.benchmark, self.benchmark_arguments.story,
         pinpoint_job_queued_time.total_seconds())
 
-    title = _ROUND_PUSHPIN + ' Pinpoint job started.'
-    comment = '\n'.join((title, self.url))
+    comment = _ROUND_PUSHPIN + ' Pinpoint job started: ' + self.url
     deferred.defer(
         _PostBugCommentDeferred,
         self.bug_id,
         self.project,
         comment=comment,
         labels=job_bug_update.ComputeLabelUpdates(['Pinpoint-Job-Started']),
-        send_email=True,
+        send_email=False,
         _retry_options=RETRY_OPTIONS)
 
   def _IsTryJob(self):
@@ -698,9 +712,19 @@ class Job(ndb.Model):
         }
       else:
         kind = 'commit'
+        commit_info = change_b.last_commit.AsDict()
+        review_url = commit_info.get('review_url')  # Safely get the URL
+
+        cl_number = ''
+        if not review_url:
+          logging.warning('[CULPRITS] Culprit commit does not have review_url.')
+        else:
+          cl_number = review_url.split('/')[-1]
+
         commit_dict = {
             'repository': change_b.last_commit.repository,
             'git_hash': change_b.last_commit.git_hash,
+            'cl_number': cl_number,
         }
       regression_cnt += 1
       # Call sandwich verification workflow.
@@ -712,7 +736,8 @@ class Job(ndb.Model):
           kind=kind,
           commit_dict=commit_dict,
           values_a=values_a,
-          values_b=values_b)
+          values_b=values_b,
+          anomaly=wf_execution_request)
       cloud_workflow_key = cloud_workflow.put()
       cloud_workflows_keys.append(cloud_workflow_key.id())
       workflow_executions.append(execution_name)
@@ -724,13 +749,14 @@ class Job(ndb.Model):
     logging.debug('Processing outputs.')
     if self._IsTryJob():
       # There is no comparison metric.
-      title = '<b>%s Job complete. See results below.</b>' % _ROUND_PUSHPIN
+      comment = '%s Job complete: %s' % (_ROUND_PUSHPIN, self.url)
       deferred.defer(
           _PostBugCommentDeferred,
           self.bug_id,
           self.project,
-          comment='\n'.join((title, self.url)),
+          comment=comment,
           labels=['Pinpoint-Tryjob-Completed'],
+          send_email=True,
           _retry_options=RETRY_OPTIONS)
       return
 
@@ -766,15 +792,15 @@ class Job(ndb.Model):
       # First, check if there are no differences because one side of bisection
       # failed outright.
       if self.state.FirstOrLastChangeFailed():
-        title = "<b>%s Job finished with errors.</b>" % _CRYING_CAT_FACE
-        comment = '\n'.join(
-            (title, self.url, '', _FIRST_OR_LAST_FAILED_COMMENT))
+        title = "%s Job finished with errors: %s" % (_CRYING_CAT_FACE, self.url)
+        comment = '\n'.join((title, '', _FIRST_OR_LAST_FAILED_COMMENT))
         deferred.defer(
             _PostBugCommentDeferred,
             self.bug_id,
             self.project,
             comment=comment,
             labels=job_bug_update.ComputeLabelUpdates(['Pinpoint-Job-Failed']),
+            send_email=True,
             _retry_options=RETRY_OPTIONS)
         return
 
@@ -783,14 +809,16 @@ class Job(ndb.Model):
       # WontFix. This is based on information we've gathered in production that
       # most issues where we find Pinpoint cannot reproduce the difference end
       # up invariably as "Unconfirmed" with very little follow-up.
-      title = "<b>%s Couldn't reproduce a difference.</b>" % _ROUND_PUSHPIN
+      comment = "%s Couldn't reproduce a difference: %s" % (_ROUND_PUSHPIN,
+                                                            self.url)
       deferred.defer(
           _PostBugCommentDeferred,
           self.bug_id,
           self.project,
-          comment='\n'.join((title, self.url)),
+          comment=comment,
           labels=job_bug_update.ComputeLabelUpdates(
               ['Pinpoint-Job-Completed', 'Pinpoint-No-Repro']),
+          send_email=True,
           status='WontFix',
           _retry_options=RETRY_OPTIONS)
       return
@@ -807,32 +835,34 @@ class Job(ndb.Model):
       regression_cnt, wf_executions = self._StartSandwichAndUpdateWorkflowGroup(
           improvement_dir, differences, result_values)
       if regression_cnt == 0:
-        title = ("<b>%s %s Couldn't reproduce a difference in the"
-                 "regression direction.</b>") % (_ROUND_PUSHPIN, _SANDWICH)
+        comment = ("%s %s Couldn't reproduce a difference in the"
+                   "regression direction: %s") % (_ROUND_PUSHPIN, _SANDWICH,
+                                                  self.url)
         deferred.defer(
             _PostBugCommentDeferred,
             self.bug_id,
             self.project,
-            comment='\n'.join((title, self.url)),
+            comment=comment,
             labels=['Pinpoint-Job-Completed', 'Pinpoint-No-Regression'],
+            send_email=True,
             status='WontFix',
             _retry_options=RETRY_OPTIONS)
       else:
-        title1 = ("<b>%s %s %s regressions found.</b>" %
-                  (_ROUND_PUSHPIN, _SANDWICH, regression_cnt))
-        title2 = "<b>Started sandwich culprit verification process.</b>"
+        title1 = ("%s %s %s regressions found: %s" %
+                  (_ROUND_PUSHPIN, _SANDWICH, regression_cnt, self.url))
+        title2 = "Started sandwich culprit verification process."
         workflow_details = ("culprit verification workflow keys: %s" %
                             (wf_executions))
         deferred.defer(
             _PostBugCommentDeferred,
             self.bug_id,
             self.project,
-            comment='\n'.join((title1, self.url, title2, workflow_details)),
+            comment='\n'.join((title1, title2, workflow_details)),
             labels=[
                 'Pinpoint-Job-Completed',
                 'Culprit-Sandwich-Verification-Started'
             ],
-            send_email=True,
+            send_email=False,
             _retry_options=RETRY_OPTIONS)
       return
 
@@ -852,6 +882,10 @@ class Job(ndb.Model):
         _retry_options=RETRY_OPTIONS)
 
   def _UpdateGerritIfNeeded(self, success=True):
+    if self.origin == _JOB_ORIGIN_CQ:
+      # Do not spam on Gerrit as jobs from CQ will have results reported
+      # on the Checks tab.
+      return
     if self.gerrit_server and self.gerrit_change_id:
       icon = _ROUND_PUSHPIN if success else _CRYING_CAT_FACE
       state = 'complete' if success else 'failed'
@@ -884,7 +918,8 @@ class Job(ndb.Model):
       # What follows are the details we are providing when
       # posting updates to the associated bug.
       tb = traceback.format_exc() or ''
-      title = _CRYING_CAT_FACE + ' Pinpoint job stopped with an error.'
+      title = (
+          _CRYING_CAT_FACE + ' Pinpoint job stopped with an error: ' + self.url)
       exc_info = sys.exc_info()
       if exception is None:
         if exc_info[1] is None:
@@ -910,7 +945,10 @@ class Job(ndb.Model):
     if not self.cancelled:
       self._PrintJobStatusRunTimeMetrics("failed", True)
 
-      comment = '\n'.join((title, self.url, '', exc_message))
+      if self._IsTryJob():
+        self.state.Fail()
+
+      comment = '\n'.join((title, '', exc_message))
 
       deferred.defer(
           _PostBugCommentDeferred,
@@ -931,6 +969,8 @@ class Job(ndb.Model):
     # https://github.com/catapult-project/catapult/issues/3900
     task_name = str(uuid.uuid4())
     logging.info('JobQueueDebug: Adding jobrun. ID: %s', self.job_id)
+    if self.origin == _JOB_ORIGIN_CQ:
+      countdown = _TASK_INTERVAL_CQ
     try:
       task = taskqueue.add(
           queue_name='job-queue',
@@ -970,7 +1010,25 @@ class Job(ndb.Model):
     self.task = None  # In case an exception is thrown.
 
     logging.info('JobQueueDebug: Starting jobrun. ID: %s', self.job_id)
+
     try:
+      # If the job is triggered by Perf-on-cq job, it should be cancelled when
+      # the cq try job is cancelled.
+      if self.origin == _JOB_ORIGIN_CQ:
+        buildbucket_id = self.tags.get('buildbucket-id')
+        if buildbucket_id:
+          job_status = buildbucket_service.GetJobStatus(buildbucket_id)
+          build_status = job_status.get('status', '')
+          logging.debug('[POC] Checking BB job %s status: %s', buildbucket_id,
+                        build_status)
+          if build_status in ['FAILURE', 'INFRA_FAILURE', 'CANCELED']:
+            reason = 'Pinpoint job is no longer needed. CQ try job %s status: %s' % (
+                buildbucket_id, build_status)
+            logging.info('[POC] Cancelling Pinpoint job %s. %s', self.job_id,
+                         reason)
+            self.Cancel(user=utils.ServiceAccountEmail(), reason=reason)
+            return
+
       if scheduler.IsStopped(self):
         # When a user manually cancels a Pinpoint job, job.Cancel() is
         # executed, but it is possible for job.Run() to execute simultaneously,
@@ -983,23 +1041,6 @@ class Job(ndb.Model):
         self._PrintJobStatusRunTimeMetrics("cancelled")
 
         raise errors.BuildCancelled('Pinpoint Job cancelled')
-      if self.use_execution_engine:
-        # Treat this as if it's a poll, and run the handler here.
-        context = task_module.Evaluate(
-            self,
-            event_module.Event(type='initiate', target_task=None, payload={}),
-            task_evaluator.ExecutionEngine(self))
-        result_status = context.get('performance_bisection', {}).get('status')
-        if result_status not in {'failed', 'completed'}:
-          return
-
-        if result_status == 'failed':
-          execution_errors = context['find_culprit'].get('errors', [])
-          if execution_errors:
-            self.exception_details = execution_errors[0]
-
-        self._Complete()
-        return
 
       logging.info('JobQueueDebug: Scheduling jobrun. ID: %s', self.job_id)
       if not self._IsTryJob():
@@ -1150,9 +1191,9 @@ class Job(ndb.Model):
 
     self._PrintJobStatusRunTimeMetrics("cancelled")
 
-    title = _ROUND_PUSHPIN + ' Pinpoint job cancelled.'
-    comment = u'{}\n{}\n\nCancelled by {}, reason given: {}'.format(
-        title, self.url, user, reason)
+    comment = (u'{} Pinpoint job cancelled: {}\n'
+               u'Cancelled by {}, reason given: {}').format(
+                   _ROUND_PUSHPIN, self.url, user, reason)
     deferred.defer(
         _PostBugCommentDeferred,
         self.bug_id,

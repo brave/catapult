@@ -236,6 +236,8 @@ class NewTest(_NewTest):
 
   def testComparisonModeTry_BaseAndExpFlags(self):
     request = dict(_BASE_REQUEST)
+    disable_infobar_arg = \
+      '--extra-browser-args=--disable-features=SessionRestoreInfobar'
     del request['end_git_hash']
     del request['start_git_hash']
     request['comparison_mode'] = 'try'
@@ -247,6 +249,10 @@ class NewTest(_NewTest):
         '--extra-browser-args',
         'something-else',
     ]
+    expected_base_args = list(base_args)
+    expected_base_args.append(disable_infobar_arg)
+    expected_exp_args = list(exp_args)
+    expected_exp_args.append(disable_infobar_arg)
     request['base_extra_args'] = json.dumps(base_args)
     request['experiment_extra_args'] = json.dumps(exp_args)
     response = self.Post('/api/new', request, status=200)
@@ -254,11 +260,11 @@ class NewTest(_NewTest):
     self.assertEqual(job.comparison_mode, 'try')
     self.assertEqual(
         str(job.state._changes[0]),
-        'base: chromium@3 (%s) (Variant: 0)' % (', '.join(base_args)),
+        'base: chromium@3 (%s) (Variant: 0)' % (', '.join(expected_base_args)),
     )
     self.assertEqual(
         str(job.state._changes[1]),
-        'exp: chromium@3 (%s) (Variant: 1)' % (', '.join(exp_args)),
+        'exp: chromium@3 (%s) (Variant: 1)' % (', '.join(expected_exp_args)),
     )
 
   def testComparisonModeTry_BaseNoPatchAndExperimentCommitPatch(self):
@@ -521,9 +527,9 @@ class NewTest(_NewTest):
     self.ExecuteDeferredTasks('default')
 
     post_issue.assert_called_once_with(
-        12345, 'chromium', comment=mock.ANY, send_email=True)
+        12345, 'chromium', comment=mock.ANY, send_email=False)
     message = post_issue.call_args.kwargs['comment']
-    self.assertIn('Pinpoint job created and queued.', message)
+    self.assertIn('created and queued', message)
 
   def testExtraArgsSupported(self):
     request = dict(_BASE_REQUEST)
@@ -543,27 +549,6 @@ class NewTest(_NewTest):
       if isinstance(quest,
                     (quest_module.RunGTest, quest_module.RunTelemetryTest)):
         self.assertIn('--experimental-flag', quest._extra_args)
-
-  def testNewUsingExecutionEngine(self):
-    request = dict(_BASE_REQUEST)
-    request.update({
-        'chart': 'some_chart',
-        'story': 'some_story',
-        'story_tags': 'some_tag,some_other_tag',
-        'experimental_execution_engine': 'on',
-        'target': 'performance_test_suite',
-        'comparison_mode': 'performance',
-    })
-    response = self.Post('/api/new', request, status=200)
-    job = job_module.JobFromId(json.loads(response.body)['jobId'])
-    self.assertIsNotNone(job.benchmark_arguments)
-    self.assertEqual('speedometer', job.benchmark_arguments.benchmark)
-    self.assertEqual('some_story', job.benchmark_arguments.story)
-    self.assertEqual('some_tag,some_other_tag',
-                     job.benchmark_arguments.story_tags)
-    self.assertEqual('some_chart', job.benchmark_arguments.chart)
-    self.assertEqual(None, job.benchmark_arguments.statistic)
-    self.assertTrue(job.use_execution_engine)
 
   def testVrQuest(self):
     request = dict(_BASE_REQUEST)

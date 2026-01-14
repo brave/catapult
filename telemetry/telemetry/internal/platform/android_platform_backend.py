@@ -86,6 +86,8 @@ _DEVICE_COPY_SCRIPT_LOCATION = (
 _DEVICE_MEMTRACK_HELPER_LOCATION = '/data/local/tmp/profilers/memtrack_helper'
 _DEVICE_CLEAR_SYSTEM_CACHE_TOOL_LOCATION = '/data/local/tmp/clear_system_cache'
 
+_OS_LETTER_CUTOFF_VERSION = 13
+
 
 class _VideoRecorder():
   def __init__(self):
@@ -369,22 +371,23 @@ class AndroidPlatformBackend(
     return self._device.product_model
 
   def GetTypExpectationsTags(self):
-    os_release_version = self.GetOSReleaseVersion()
+    os_release_version = int(self.GetOSReleaseVersion())
     tags = [
         self.GetOSName(),
         f'android-{os_release_version}',
     ]
-    # Starting in 2024, the Android image naming scheme changed so that the
-    # first letter no longer corresponds to the codename, e.g. Android 14 is
-    # no longer Android U. Instead, the release version should be used directly.
-    # The letter version is kept around for backwards compatibility for OS
-    # versions that stopped being updated prior to the naming change. See
-    # crbug.com/333795261 for details.
-    if int(os_release_version) <= 13:
+    # See comment in GetOSVersionName() for why we report additional tags on
+    # older Android versions.
+    if os_release_version <= _OS_LETTER_CUTOFF_VERSION:
       os_version = self.GetOSVersionName().lower()
       os_version = _MAP_TO_USER_FRIENDLY_OS_NAMES.get(os_version, os_version)
       tags.append(f'android-{os_version}')
     tags = test_utils.sanitizeTypExpectationsTags(tags)
+
+    if self.IsPcHardwareType():
+      tags.append('desktop')
+    else:
+      tags.append('mobile')
 
     # telemetry benchmark's expectations need to know the model name
     # and if it is a low end device
@@ -395,12 +398,19 @@ class AndroidPlatformBackend(
             device_type_name, device_type_name)])
     if self.IsLowEnd():
       tags.append('android-low-end')
-    tags.append('mobile')
     return tags
 
   @decorators.Cache
   def GetOSVersionName(self):
-    return self._device.GetProp('ro.build.id')[0]
+    # Starting in 2024, the Android image naming scheme changed so that the
+    # first letter no longer corresponds to the codename, e.g. Android 14 is
+    # no longer Android U. For versions prior to this change, report the letter
+    # for backwards compatibility. Otherwise, report the numerical version. See
+    # crbug.com/333795261 for details.
+    os_release_version = self.GetOSReleaseVersion()
+    if int(os_release_version) <= _OS_LETTER_CUTOFF_VERSION:
+      return self._device.GetProp('ro.build.id')[0]
+    return os_release_version
 
   def GetOSVersionDetailString(self):
     return self._device.GetProp('ro.build.id')
@@ -412,6 +422,26 @@ class AndroidPlatformBackend(
     Any minor or patch versions are stripped off.
     """
     return self._device.GetProp('ro.build.version.release').split('.')[0]
+
+  @decorators.Cache
+  def IsPcHardwareType(self):
+    """Checks whether the device is an Android desktop device."""
+    feature_output = self._device.RunShellCommand(['pm', 'list', 'features'])
+    for line in feature_output:
+      if 'android.hardware.type.pc' in line:
+        return True
+    return False
+
+  @decorators.Cache
+  def IsXrDevice(self):
+    """Checks whether the device is an Android XR device."""
+    feature_output = self._device.RunShellCommand(['pm', 'list', 'features'])
+    # Aligned with base/android/java/src/org/chromium/base/PackageManagerUtils.java
+    for line in feature_output:
+      if 'android.software.xr.immersive' in line \
+          or 'android.software.xr.api.openxr' in line:
+        return True
+    return False
 
   def GetDeviceHostClockOffset(self):
     """Returns the difference between the device and host clocks."""
@@ -557,6 +587,11 @@ class AndroidPlatformBackend(
     saved_profile_location = posixpath.join(
         self._device.GetExternalStoragePath(),
         'profile', profile_base)
+    # For PC hardware types, which log in as the main user, the source path
+    # must be resolved to ensure it is accessible.
+    if self.IsPcHardwareType():
+      saved_profile_location = self._device.ResolveSpecialPath(
+          saved_profile_location)
     self._device.PushChangedFiles([(new_profile_dir, saved_profile_location)],
                                   delete_device_stale=True)
 
@@ -604,6 +639,7 @@ class AndroidPlatformBackend(
           _DEVICE_COPY_SCRIPT_FILE,
           _DEVICE_COPY_SCRIPT_LOCATION)
       self._device_copy_script = _DEVICE_COPY_SCRIPT_LOCATION
+
     self._device.RunShellCommand(
         ['sh', self._device_copy_script, source, dest], check_return=True)
 

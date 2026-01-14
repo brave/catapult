@@ -297,6 +297,10 @@ class BrowserFinderOptions(argparse.Namespace):
                        'running 20+ benchmarks much faster (especially on '
                        'android where UpdateExecutableIfNeeded can take '
                        'minutes).')
+    group.add_argument('--do-not-store-tombstones',
+                       action='store_false',
+                       dest='store_tombstones',
+                       help='Do not store tombstones from an Android device.')
 
     # Cast browser options
     group = parser.add_argument_group('Cast browser options')
@@ -670,6 +674,9 @@ class BrowserOptions():
     # runtime environment.
     self.environment = None
 
+    # Suppress all permission prompts by automatically denying them.
+    self.deny_permission_prompts = True
+
   def __repr__(self):
     return str(sorted(self.__dict__.items()))
 
@@ -701,6 +708,7 @@ class BrowserOptions():
               'is used by default'))
     group.add_argument(
         '--extra-browser-args',
+        action='append',
         dest='extra_browser_args_as_string',
         help='Additional arguments to pass to the browser when it starts')
     group.add_argument(
@@ -731,6 +739,13 @@ class BrowserOptions():
         '--gtest_output',
         help='Ignored argument for compatibility with runtest.py harness')
 
+    group.add_argument(
+        '--no-deny-permission-prompts',
+        action='store_false',
+        dest='deny_permission_prompts',
+        help='Do not suppress permission prompts. Default (without '
+        'this option) is to automatically deny permission prompts')
+
   def UpdateFromParseResults(self, finder_options):
     """Copies our options from finder_options."""
     browser_options_list = [
@@ -739,7 +754,8 @@ class BrowserOptions():
         'profile_dir',
         'profile_type',
         'show_stdout',
-        'compatibility_mode'
+        'compatibility_mode',
+        'deny_permission_prompts'
         ]
     for o in browser_options_list:
       a = getattr(finder_options, o, None)
@@ -750,9 +766,14 @@ class BrowserOptions():
     self.browser_type = finder_options.browser_type
 
     if hasattr(self, 'extra_browser_args_as_string'):
-      tmp = shlex.split(self.extra_browser_args_as_string, posix=(not _IsWin()))
-      self.AppendExtraBrowserArgs(tmp)
+      all_args = []
+      # with action='append', extra_browser_args_as_string is a list.
+      for arg_string in self.extra_browser_args_as_string:
+        all_args.extend(shlex.split(arg_string, posix=(not _IsWin())))
+      self.AppendExtraBrowserArgs(all_args)
       delattr(self, 'extra_browser_args_as_string')
+      self.ConsolidateValuesForArg('--enable-features')
+      self.ConsolidateValuesForArg('--disable-features')
     if hasattr(self, 'extra_wpr_args_as_string'):
       tmp = shlex.split(self.extra_wpr_args_as_string, posix=(not _IsWin()))
       self.extra_wpr_args.extend(tmp)
@@ -761,12 +782,22 @@ class BrowserOptions():
       self.dont_override_profile = True
 
     if self.profile_dir:
-      if self.profile_type != 'clean':
+      if self.profile_type != 'clean' and self.profile_type != 'exact':
         logging.critical(
-            "It's illegal to specify both --profile-type and --profile-dir.\n"
-            "For more information see: http://goo.gl/ngdGD5")
+            "Invalid --profile-type specified when using --profile-dir."
+            "Only 'clean' and 'exact' are allowed with --profile-dir.\n"
+            "- Use --profile-type=exact to use the specified --profile-dir directly\n"
+            "- Use --profile-type=clean to copy from --profile-dir to a temporary directory"
+        )
         sys.exit(1)
       self.profile_dir = os.path.abspath(self.profile_dir)
+    else:
+      if self.profile_type == 'exact':
+        logging.critical(
+            "When using --profile-type='exact', --profile-dir must be specified.\n"
+            "Please provide a valid profile directory with the --profile-dir argument."
+        )
+        sys.exit(1)
 
     if self.profile_dir and not os.path.isdir(self.profile_dir):
       logging.critical(
@@ -781,6 +812,10 @@ class BrowserOptions():
     if getattr(finder_options, 'logging_verbosity'):
       self.logging_verbosity = finder_options.logging_verbosity
       delattr(finder_options, 'logging_verbosity')
+
+    if hasattr(finder_options, 'deny_permission_prompts'):
+      self.deny_permission_prompts = finder_options.deny_permission_prompts
+      delattr(finder_options, 'deny_permission_prompts')
 
     # This deferred import is necessary because browser_options is imported in
     # telemetry/telemetry/__init__.py.
@@ -823,7 +858,7 @@ class BrowserOptions():
     """
     consolidated_args = []
     found_values = []
-    for arg in self.extra_browser_args:
+    for arg in self._extra_browser_args:
       if '=' in arg and arg.split('=', 1)[0] == flag:
         # Syntax is `--flag=A,B`.
         # Support for the `--flag A,B` syntax isn't present since the extra

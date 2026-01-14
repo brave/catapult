@@ -141,7 +141,7 @@ def try_builder(
 
     dims = {
         "pool": "luci.flex.try",
-        "os": "Ubuntu-22.04" if os == "Ubuntu" else os,
+        "os": "Ubuntu-24.04" if os == "Ubuntu" else os,
     }
     if dimensions:
         dims.update(dimensions)
@@ -219,7 +219,11 @@ try_builder("Catapult Linux Tryserver", "Ubuntu")
 
 try_builder("Catapult Windows Tryserver", "Windows-10")
 
-try_builder("Catapult Mac Tryserver", "Mac", dimensions = {"cpu": "x86-64"})
+# Specific OS versions are listed out because the oldest version in the pool
+# at the time of writing (10.15.7) is incompatible with newer versions of
+# Chrome. This should be changed back to just "Mac" after the minimum OS
+# version used in the pool is upgraded.
+try_builder("Catapult Mac Tryserver", "Mac-11|Mac-12|Mac-13|Mac-14", dimensions = {"cpu": "x86-64"})
 
 try_builder("Catapult Mac M1 Tryserver", "Mac", dimensions = {"cpu": "arm"})
 

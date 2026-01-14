@@ -238,6 +238,13 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
     device.GrantPermissions(self.browser_package,
                             ['android.permission.POST_NOTIFICATIONS'])
 
+    # Avoids a Chrome android permission dialog for XR.
+    if self._platform_backend.IsXrDevice():
+      device.GrantPermissions(self.browser_package,
+                              ['android.permission.SCENE_UNDERSTANDING_FINE'])
+      device.GrantPermissions(self.browser_package,
+                              ['android.permission.HAND_TRACKING'])
+
     # use legacy commandline path if in compatibility mode
     self._flag_changer = flag_changer.FlagChanger(
         device, self._backend_settings.command_line_name, use_legacy_path=
@@ -347,6 +354,27 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
 
   @decorators.Cache
   def UpdateExecutableIfNeeded(self):
+    # If we are on Android Desktop, we need to ensure that we are running as
+    # the main user. Without this, weird things are liable to happen such as
+    # the device appearing to go offline on browser restart. See b/427791059
+    # for example weirdness. Doing this in SetUpEnvironment() seems to be
+    # sufficient, but do it earlier before we install the browser in case there
+    # are additional edge cases which care about that.
+    device = self._platform_backend.device
+    if self._platform_backend.IsPcHardwareType():
+      main_user = device.GetMainUser()
+      # We explicitly set the target user for commands run on the device since
+      # the default behavior does not use whatever user is currently active. In
+      # practice, this has caused APK permissions to be granted for the wrong
+      # user, and may cause other similar issues related to the wrong user being
+      # used.
+      device.target_user = main_user
+      if device.GetCurrentUser() != main_user:
+        logging.error(
+            'Automatically switching to main user with ID %s due to running on '
+            'Android Desktop', main_user)
+        device.SwitchUser(main_user)
+
     if self._assume_browser_already_installed:
       return
 
@@ -361,7 +389,6 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
       return
 
     package_name = apk_helper.GetPackageName(self._local_apk)
-    device = self._platform_backend.device
     logging.warning('Installing %s on device if needed.', self._local_apk)
     self._platform_backend.InstallApplication(self._local_apk,
                                               modules=self._modules_to_install)
@@ -385,15 +412,6 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
       # logic before installing the WebView APK to make sure the fallback logic
       # doesn't interfere.
       device.SetWebViewFallbackLogic(False)
-      should_override_webview_provider = True
-    elif sdk_version >= version_codes.Q:
-      # For Android Q and above, WebView is the only provider that is allowed,
-      # so no other Chrome packages can be set as the WebView implementation.
-      should_override_webview_provider = False
-    elif 'monochrome' in apk_name.lower():
-      # From Android Nougat to Android P, some Chrome packages are also allowed
-      # to be WebView providers. Monochrome is the only Chrome build variant
-      # that can also act as a WebView provider.
       should_override_webview_provider = True
     else:
       should_override_webview_provider = False

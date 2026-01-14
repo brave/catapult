@@ -16,6 +16,8 @@ _DEFAULT_EXTRA_ARGS = [
 
 _STORY_REGEX = re.compile(r'[^a-zA-Z0-9]')
 
+_MAX_STRING_LENGTH = 200
+
 # crbug/1146949
 # Please keep this executable-argument mapping synced with perf waterfall:
 #  https://chromium.googlesource.com/chromium/src/+/main/tools/perf/core/bot_platforms.py
@@ -63,13 +65,40 @@ GTEST_EXECUTABLE_NAME = {
 }
 
 _CROSSBENCH_NAME = {
-    'jetstream2.crossbench': 'jetstream_2.2',
+    # Jetstream
+    'jetstream2.crossbench': 'jetstream_2',
+    'jetstream2.0.crossbench': 'jetstream_2.0',
+    'jetstream2.1.crossbench': 'jetstream_2.1',
+    'jetstream2.2.crossbench': 'jetstream_2.2',
+    'jetstream-main.crossbench': 'jetstream_main',
+    # Motionmark
+    'motionmark1.0.crossbench': 'motionmark_1.0',
+    'motionmark1.1.crossbench': 'motionmark_1.1',
+    'motionmark1.2.crossbench': 'motionmark_1.2',
     'motionmark1.3.crossbench': 'motionmark_1.3',
-    'speedometer3.crossbench': 'speedometer_3.0',
+    'motionmark1.3.1.crossbench': 'motionmark_1.3.1',
+    # Speedmeter
+    'speedometer2.crossbench': 'speedometer_2',
     'speedometer2.0.crossbench': 'speedometer_2.0',
     'speedometer2.1.crossbench': 'speedometer_2.1',
-    'loadline_phone.crossbench': 'loadline-phone',
-    'loadline_tablet.crossbench': 'loadline-tablet'
+    'speedometer3.crossbench': 'speedometer_3',
+    'speedometer3.a11y.crossbench': 'speedometer_3',
+    'speedometer3.0.crossbench': 'speedometer_3.0',
+    'speedometer3.1.crossbench': 'speedometer_3.1',
+    'speedometer-main.crossbench': 'speedometer_main',
+    # Loadline
+    'loadline_phone.crossbench': 'loadline-phone-fast',
+    'loadline_phone2.crossbench': 'loadline2-phone',
+    'loadline_tablet.crossbench': 'loadline-tablet-fast',
+    # Embedder
+    'embedder.crossbench': 'embedder',
+    # Loading
+    'loading.crossbench': 'loading',
+}
+
+_CROSSBENCH_EXTRA_ARGS = {
+    'speedometer3.a11y.crossbench':
+        ('--extra-browser-args=--force-renderer-accessibility',),
 }
 
 
@@ -119,7 +148,13 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
     return relative_cwd, command
 
   def Start(self, change, isolate_server, isolate_hash):
-    extra_swarming_tags = {'change': str(change)}
+    change_string = str(change)
+    # If the change string is too long, truncate it to avoid
+    # exceeding the swarming string length.
+    if len(change_string) > _MAX_STRING_LENGTH:
+      change_string = str(change)[:_MAX_STRING_LENGTH].strip()
+
+    extra_swarming_tags = {'change': change_string}
     return self._Start(
         change,
         isolate_server,
@@ -140,6 +175,7 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
     extra_test_args.append(f'--browser={browser}')
 
     extra_test_args += super()._ExtraTestArgs(arguments)
+    extra_test_args += _CROSSBENCH_EXTRA_ARGS.get(benchmark, ())
     return extra_test_args
 
   @classmethod
@@ -153,11 +189,6 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
 
     extra_test_args = []
 
-    # If we're running a single test,
-    # do so even if it's configured to be ignored in expectations.config.
-    if not arguments.get('story_tags'):
-      extra_test_args.append('-d')
-
     if benchmark in _WATERFALL_ENABLED_GTEST_NAMES:
       # crbug/1146949
       # Pass the correct arguments to run gtests on pinpoint.
@@ -167,6 +198,11 @@ class RunTelemetryTest(run_performance_test.RunPerformanceTest):
       extra_test_args += ('--non-telemetry', 'true')
       extra_test_args.extend(_WATERFALL_ENABLED_GTEST_NAMES[benchmark])
     else:
+      # If we're running a single test,
+      # do so even if it's configured to be ignored in expectations.config.
+      if not arguments.get('story_tags'):
+        extra_test_args.append('-d')
+
       extra_test_args += ('--benchmarks', benchmark)
 
     story = arguments.get('story')

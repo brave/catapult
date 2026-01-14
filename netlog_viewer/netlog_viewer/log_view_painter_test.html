@@ -1461,7 +1461,17 @@ QuicError.QUIC_NETWORK_IDLE_TIMEOUT + ' (QUIC_NETWORK_IDLE_TIMEOUT)';
           'bypass_list': ['*.local', 'foo', '<local>'],
           'pac_url': 'https://config/wpad.dat',
           'single_proxy': ['cache-proxy:3128', 'socks4://other:999'],
-          'source': 'SYSTEM'
+          'source': 'SYSTEM',
+          'override_rules': [
+            {
+              'destination_matchers': 'example.test;',
+              'dns_conditions': [{
+                'host': 'https://site.test',
+                'result': 'NotFound'
+              }
+            ],
+            'proxy_list': ['direct://']
+          }]
         },
         'old_config': {'auto_detect': true}
       },
@@ -1476,9 +1486,24 @@ QuicError.QUIC_NETWORK_IDLE_TIMEOUT + ' (QUIC_NETWORK_IDLE_TIMEOUT)';
 '                        --> old_config =\n' +
 '                               Auto-detect\n' +
 '                        --> new_config =\n' +
-'                               (1) Auto-detect\n' +
-'                               (2) PAC script: https://config/wpad.dat\n' +
-'                               (3) Proxy server: [cache-proxy:3128, ' +
+'                               (1) Override rules:\n' +
+'                                   [\n' +
+'                                     {\n' +
+'                                       "destination_matchers": "example.test;",\n' +
+'                                       "dns_conditions": [\n' +
+'                                         {\n' +
+'                                           "host": "https://site.test",\n' +
+'                                           "result": "NotFound"\n' +
+'                                         }\n' +
+'                                       ],\n' +
+'                                       "proxy_list": [\n' +
+'                                         "direct://"\n' +
+'                                       ]\n' +
+'                                     }\n' +
+'                                   ]\n' +
+'                               (2) Auto-detect\n' +
+'                               (3) PAC script: https://config/wpad.dat\n' +
+'                               (4) Proxy server: [cache-proxy:3128, ' +
 'socks4://other:999]\n' +
 '                                   Bypass list: \n' +
 '                                     *.local\n' +

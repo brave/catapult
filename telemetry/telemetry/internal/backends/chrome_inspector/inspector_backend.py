@@ -19,6 +19,7 @@ from telemetry.core import exceptions
 from telemetry import decorators
 from telemetry.internal.backends.chrome_inspector import devtools_http
 from telemetry.internal.backends.chrome_inspector import inspector_console
+from telemetry.internal.backends.chrome_inspector import inspector_fetch
 from telemetry.internal.backends.chrome_inspector import inspector_log
 from telemetry.internal.backends.chrome_inspector import inspector_memory
 from telemetry.internal.backends.chrome_inspector import inspector_page
@@ -78,14 +79,18 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
     try:
       self._websocket.Connect(self.debugger_url, timeout)
       self._console = inspector_console.InspectorConsole(self._websocket)
+      self._fetch = inspector_fetch.InspectorFetch(self._websocket)
       self._log = inspector_log.InspectorLog(self._websocket)
       self._memory = inspector_memory.InspectorMemory(self._websocket)
-      self._page = inspector_page.InspectorPage(
-          self._websocket, timeout=timeout)
       self._runtime = inspector_runtime.InspectorRuntime(self._websocket)
-      self._serviceworker = inspector_serviceworker.InspectorServiceWorker(
-          self._websocket, timeout=timeout)
       self._storage = inspector_storage.InspectorStorage(self._websocket)
+
+      # Only enable 'Page' and 'ServiceWorker' domain for 'page' targets.
+      if self._context['type'] == 'page':
+        self._page = inspector_page.InspectorPage(self._websocket,
+                                                  timeout=timeout)
+        self._serviceworker = inspector_serviceworker.InspectorServiceWorker(
+            self._websocket, timeout=timeout)
     except (inspector_websocket.WebSocketException, exceptions.TimeoutException,
             py_utils.TimeoutException) as e:
       self._ConvertExceptionFromInspectorWebsocket(e)
@@ -130,6 +135,18 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
   @property
   def debugger_url(self):
     return self._context['webSocketDebuggerUrl']
+
+  @property
+  def serviceworker_versions(self):
+    return self._serviceworker.versions
+
+  @property
+  def serviceworker_registrations(self):
+    return self._serviceworker.registrations
+
+  @property
+  def serviceworker_error_message(self):
+    return self._serviceworker.error_message
 
   def StopAllServiceWorkers(self, timeout):
     self._serviceworker.StopAllWorkers(timeout)
@@ -865,9 +882,16 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
         likely explanation is that the devtool's target crashed.
     """
     if isinstance(error, inspector_websocket.WebSocketException):
-      new_error = exceptions.TimeoutException()
-      new_error.AddDebuggingMessage(exceptions.AppCrashException(
-          self.app, 'The app is probably crashed:\n'))
+      if issubclass(error.websocket_error_type,
+                    websocket.WebSocketConnectionClosedException):
+        # We assume that a prematurely closed websocket connection means that
+        # the target crashed.
+        new_error = exceptions.DevtoolsTargetCrashException(self.app)
+      else:
+        new_error = exceptions.TimeoutException()
+        new_error.AddDebuggingMessage(
+            exceptions.AppCrashException(self.app,
+                                         'The app is probably crashed:\n'))
     else:
       new_error = exceptions.DevtoolsTargetCrashException(self.app)
 
@@ -930,3 +954,47 @@ class InspectorBackend(six.with_metaclass(trace_event.TracedMetaClass, object)):
   @_HandleInspectorWebSocketExceptions
   def CollectGarbage(self, timeout_in_seconds=60):
     self._page.CollectGarbage(timeout_in_seconds)
+
+  @_HandleInspectorWebSocketExceptions
+  def EnableFetch(self,
+                  patterns,
+                  request_paused_callback=None,
+                  auth_required_callback=None,
+                  timeout=60):
+    self._fetch.EnableFetch(patterns, request_paused_callback,
+                            auth_required_callback, timeout)
+
+  @_HandleInspectorWebSocketExceptions
+  def DisableFetch(self, timeout=60):
+    self._fetch.DisableFetch(timeout)
+
+  @_HandleInspectorWebSocketExceptions
+  def CreateContinueRequest(self,
+                            request_id,
+                            url=None,
+                            method=None,
+                            post_data=None,
+                            headers=None):
+    return self._fetch.CreateContinueRequest(request_id, url, method, post_data,
+                                             headers)
+
+  @_HandleInspectorWebSocketExceptions
+  def ContinueRequestSync(self, request, timeout=60):
+    return self._fetch.ContinueRequestSync(request, timeout)
+
+  @_HandleInspectorWebSocketExceptions
+  def ContinueRequestAndIgnoreResponse(self, request):
+    self._fetch.ContinueRequestAndIgnoreResponse(request)
+
+  @_HandleInspectorWebSocketExceptions
+  def CreateContinueWithAuthRequest(self, request_id, auth_challenge_response):
+    return self._fetch.CreateContinueWithAuthRequest(request_id,
+                                                     auth_challenge_response)
+
+  @_HandleInspectorWebSocketExceptions
+  def ContinueWithAuthRequestSync(self, request, timeout=60):
+    return self._fetch.ContinueWithAuthRequestSync(request, timeout)
+
+  @_HandleInspectorWebSocketExceptions
+  def ContinueWithAuthRequestAndIgnoreResponse(self, request):
+    self._fetch.ContinueWithAuthRequestAndIgnoreResponse(request)

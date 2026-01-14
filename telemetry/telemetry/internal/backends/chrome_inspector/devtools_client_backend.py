@@ -283,7 +283,7 @@ class _DevToolsClientBackend():
     # Major number can't be determined, so fail any major number checks.
     return 0
 
-  def _ListInspectableContexts(self):
+  def GetListOfInspectableContexts(self):
     return self._devtools_http.RequestJson('')
 
   def RequestNewTab(self, timeout, in_new_window=False, url=None):
@@ -342,7 +342,7 @@ class _DevToolsClientBackend():
     Raises:
       devtools_http.DevToolsClientConnectionError
     """
-    for c in self._ListInspectableContexts():
+    for c in self.GetListOfInspectableContexts():
       if c['id'] == tab_id:
         return c['url']
     return None
@@ -353,12 +353,12 @@ class _DevToolsClientBackend():
     Raises:
       devtools_http.DevToolsClientConnectionError
     """
-    contexts = self._ListInspectableContexts()
+    contexts = self.GetListOfInspectableContexts()
     return tab_id in [c['id'] for c in contexts]
 
   def GetUpdatedInspectableContexts(self):
     """Returns an updated instance of _DevToolsContextMapBackend."""
-    contexts = self._ListInspectableContexts()
+    contexts = self.GetListOfInspectableContexts()
     self._devtools_context_map_backend._Update(contexts)
     return self._devtools_context_map_backend
 

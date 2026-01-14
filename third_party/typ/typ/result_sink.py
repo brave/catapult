@@ -23,6 +23,7 @@ See go/resultdb and go/resultsink for more details.
 import base64
 from collections.abc import Mapping
 import contextlib
+import enum
 import hashlib
 import json
 import os
@@ -56,9 +57,17 @@ STDERR_KEY = 'typ_stderr'
 MAX_TAG_LENGTH = 256
 SHA1_HEX_HASH_LENGTH = 40
 
+# These are the names of the ResultDB schemes that the typ runner currently
+# expects to encounter.
+class ModuleScheme(enum.Enum):
+    FLAT = 'flat'
+    PYUNIT = 'pyunit'
+    WEBTEST = 'webtest'
+    WEBGPUCTS = 'webgpucts'
+
 
 class ResultSinkReporter(object):
-    def __init__(self, host=None, disable=False, output_file=None):
+    def __init__(self, host=None, disable=False, output_file=None, module_scheme=None):
         """Class for interacting with ResultDB's ResultSink.
 
         Args:
@@ -69,6 +78,7 @@ class ResultSinkReporter(object):
                 makes no attempt at being thread-safe, as it is only intended
                 as a workaround for Skylab, and it is not expected to run tests
                 in parallel there.
+            module_scheme: A choice from the ModuleScheme enum.
         """
         self.host = host or typ_host.Host()
         self._sink = None
@@ -79,6 +89,7 @@ class ResultSinkReporter(object):
         self._chromium_src_dir = None
         self._output_file = output_file
         self._pending_results = None
+        self._module_scheme = module_scheme
         if disable:
             return
 
@@ -136,7 +147,7 @@ class ResultSinkReporter(object):
     def report_individual_test_result(
             self, result, artifact_output_dir, expectations, test_file_location,
             test_file_line=None, test_name_prefix='', additional_tags=None,
-            html_summary=None):
+            html_summary=None, properties=None):
         """Reports a single test result to ResultSink.
 
         Inputs are typically similar to what is passed to
@@ -165,6 +176,8 @@ class ResultSinkReporter(object):
             html_summary: Optional human-readable explanation of the result as
                     sanitized HTML. If omitted, the reporter will generate a
                     default summary with links extracted from artifacts.
+            properties: Optional arbitrary JSON object that contains structured,
+                    domain-specific properties of the test result.
 
         Returns:
             0 if the result was reported successfully or ResultDB is not
@@ -280,7 +293,7 @@ class ResultSinkReporter(object):
         test_location_in_repo = self._convert_path_to_repo_path(
             os.path.normpath(test_file_location))
         test_metadata = {
-            'name': test_id,
+            'name': result.name,
             'location': {
                 'repo': 'https://chromium.googlesource.com/chromium/src',
                 'fileName': test_location_in_repo,
@@ -292,8 +305,9 @@ class ResultSinkReporter(object):
 
         status = _JSON_TO_RESULTDB_STATUSES.get(result.actual, result.actual)
         return self._report_result(
-                test_id, status, result_is_expected, artifacts, tag_list,
-                html_summary, result.took, test_metadata, result.failure_reason)
+                test_id, test_name_prefix, status, result_is_expected, artifacts, tag_list,
+                html_summary, result.took, test_metadata, result.failure_reason,
+                properties)
 
     @contextlib.contextmanager
     def batch_results(self):
@@ -329,12 +343,13 @@ class ResultSinkReporter(object):
             self._pending_results = None
 
     def _report_result(
-            self, test_id, status, expected, artifacts, tag_list, html_summary,
-            duration, test_metadata, failure_reason):
+            self, test_id, test_name_prefix, status, expected, artifacts, tag_list, html_summary,
+            duration, test_metadata, failure_reason, properties):
         """Reports a single test result to ResultSink.
 
         Args:
             test_id: A string containing the unique identifier of the test.
+            test_name_prefix: A string that was added to the test_id.
             status: A string containing the status of the test. Must be in
                     |VALID_STATUSES|.
             expected: A boolean denoting whether |status| is expected or not.
@@ -347,6 +362,8 @@ class ResultSinkReporter(object):
             test_metadata: A dict containing additional test metadata to upload.
             failure_reason: An optional FailureReason object describing the
                     reason the test failed.
+            properties: Optional arbitrary JSON object that contains
+                    structured, domain-specific properties of the test result.
 
         Returns:
             0 if the result was reported successfully or ResultDB is not
@@ -358,8 +375,9 @@ class ResultSinkReporter(object):
         # TODO(crbug.com/1104252): Handle testLocation key so that ResultDB can
         # look up the correct component for bug filing.
         test_result = _create_json_test_result(
-                test_id, status, expected, artifacts, tag_list, html_summary,
-                duration, test_metadata, failure_reason)
+                test_id, test_name_prefix, status, expected, artifacts, tag_list, html_summary,
+                duration, test_metadata, failure_reason, properties,
+                self._module_scheme)
 
         if self._pending_results:
             self._pending_results.add(test_result)
@@ -428,12 +446,14 @@ class ResultSinkError(Exception):
 
 
 def _create_json_test_result(
-        test_id, status, expected, artifacts, tag_list, html_summary,
-        duration, test_metadata, failure_reason):
+        test_id, test_name_prefix, status, expected, artifacts, tag_list, html_summary,
+        duration, test_metadata, failure_reason, properties=None,
+        module_scheme=None):
     """Formats data to be suitable for sending to ResultSink.
 
     Args:
         test_id: A string containing the unique identifier of the test.
+        test_name_prefix: A string of the prefix added to tests.
         status: A string containing the status of the test. Must be in
                 |VALID_STATUSES|.
         expected: A boolean denoting whether |status| is expected or not.
@@ -446,6 +466,10 @@ def _create_json_test_result(
         test_metadata: A dict containing additional test metadata to upload.
         failure_reason: An optional FailureReason object describing the
                 reason the test failed.
+        properties: Optional arbitrary JSON object that contains structured,
+                domain-specific properties of the test result.
+        module_scheme: A choice from the ModuleScheme enum indicating which
+                module scheme to upload to resultdb with.
 
     Returns:
         A dict containing the provided data in a format that is ingestable by
@@ -472,8 +496,16 @@ def _create_json_test_result(
             'tags': [],
             'testMetadata': test_metadata,
     }
+
+    result_dict = _create_test_id_struct_dict(test_id, module_scheme)
+    if result_dict:
+      test_result['testIdStructured'] = result_dict
+
     for (k, v) in tag_list:
         test_result['tags'].append({'key': k, 'value': v})
+
+    if test_id.startswith('gpu_tests.'):
+      test_result['tags'].append({'key': 'gpu_test_class', 'value': test_name_prefix.rstrip('.') })
 
     # This is based off the protobuf in
     # https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/proto/v1/failure_reason.proto
@@ -483,6 +515,9 @@ def _create_json_test_result(
         test_result['failureReason'] = {
                 'primaryErrorMessage': primary_error_message,
         }
+
+    if properties:
+        test_result['properties'] = properties
 
     return test_result
 
@@ -498,6 +533,65 @@ def result_sink_retcode_from_result_set(result_set):
         ResultSink, otherwise 0.
     """
     return int(any(r.result_sink_retcode for r in result_set.results))
+
+
+def _create_test_id_struct_dict(test_id, module_scheme):
+    struct_test_dict = {
+        'coarseName': None,
+        'fineName': None,
+        'caseNameComponents': None,
+    }
+
+    # In a few instances, a test execution call (such as presubmit tests)
+    # runs tests that have multiple schemes. As only one module
+    # scheme can be specified when the tests are executed, the environment
+    # variable allows a specific scheme to be set.
+    env_module_scheme = os.environ.get('RESULTDB_MODULE_SCHEME')
+    if env_module_scheme:
+        module_scheme = ModuleScheme(env_module_scheme)
+
+    # Most of the tests should by pyunit.
+    if not module_scheme:
+        module_scheme = ModuleScheme.PYUNIT
+        if 'webgpu' in test_id and ':' in test_id:
+            module_scheme = ModuleScheme.WEBGPUCTS
+        elif test_id.startswith('gpu_tests.'):
+            module_scheme = ModuleScheme.FLAT
+
+    if module_scheme == ModuleScheme.WEBTEST:
+        test_split = test_id.rsplit('/', 1)
+        fine_name = test_split[0] if len(test_split) > 1 else '/'
+        case_name = test_split[1] if len(test_split) > 1 else test_split[0]
+        struct_test_dict['fineName'] =  fine_name
+        struct_test_dict['caseNameComponents'] = [case_name]
+    elif module_scheme == ModuleScheme.WEBGPUCTS:
+        # gpu_tests take the form of:
+        # gpu_tests.WebGpu.{suite}:{path,to,file}:{test,test}:{param=}
+        # the parameters can also have ':' so cannot use rsplit.
+        test_split =  test_id.split(':', 3)
+        suite = test_split[0].split('.')[-1]
+        struct_test_dict['coarseName'] =  '%s:%s' % (suite, test_split[1])
+        struct_test_dict['fineName'] =  test_split[2]
+        if len(test_split) <= 3 or not test_split[3]:
+            params = 'single_case'
+        else:
+            params = test_split[3]
+
+        struct_test_dict['caseNameComponents'] = [params]
+    elif module_scheme == ModuleScheme.PYUNIT:
+        test_split = test_id.rsplit('.', 2)
+        if len(test_split) != 3:
+            return None
+
+        struct_test_dict['coarseName'] =  test_split[0]
+        struct_test_dict['fineName'] =  test_split[1]
+        struct_test_dict['caseNameComponents'] = [test_split[2]]
+    elif module_scheme == ModuleScheme.FLAT:
+        struct_test_dict['caseNameComponents'] = [test_id]
+    else:
+        return None
+
+    return struct_test_dict
 
 
 def _truncate_to_utf8_bytes(s, length):

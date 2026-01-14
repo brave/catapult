@@ -101,5 +101,14 @@ def GetBuilds(project: str, bucket: str, builder: str):
     API_BASE_URL2 + 'SearchBuilds', method='POST', body=body)
 
 
+def CancelBuild(bb_job_id, pinpoint_job_id):
+  """Cancel the build by its id."""
+  body = {
+      'id': bb_job_id,
+      'summaryMarkdown': f'Canceled by Pinpoint job {pinpoint_job_id}'
+  }
+  logging.info("bbv2 CancelBuild body: \n%s\n", json.dumps(body))
+  return request.RequestJson(
+      API_BASE_URL2 + 'CancelBuild', method='POST', body=body)
 
 # TODO(robertocn): Implement CancelJobByID
