@@ -281,7 +281,8 @@ class TaggedTestListParser(object):
 
     def __init__(self, raw_data,
                  conflict_resolution=ConflictResolutionTypes.UNION,
-                 encode_func=None, decode_func=None):
+                 encode_func=None, decode_func=None,
+                 disable_tag_found_after_expectations_check=False):
         self.tag_sets = set()
         self.conflicts_allowed = False
         self.full_wildcard_support = False
@@ -291,6 +292,8 @@ class TaggedTestListParser(object):
         self.conflict_resolution = conflict_resolution
         self._encode_func = encode_func
         self._decode_func = decode_func
+        self._disable_tag_found_after_expectations_check = (
+            disable_tag_found_after_expectations_check)
         self._parse_raw_expectation_data(raw_data)
 
     def _parse_raw_expectation_data(self, raw_data):
@@ -337,7 +340,13 @@ class TaggedTestListParser(object):
             A set of strings containing any tag set intersections found while
             parsing the given line.
         """
-        if self.expectations:
+        # Disable "Tag found after first expectation" check only if it's
+        # specifically disabled to support additional expectations files. This
+        # is a temporary solution to allow more flexible parsing for certain
+        # cases while the long term solution should support parsing multiple
+        # expectations files more flexibly.
+        if (self.expectations and
+            not self._disable_tag_found_after_expectations_check):
             raise ParseError(lineno,
                              'Tag found after first expectation.')
         if line.startswith(self.TAG_TOKEN):
@@ -600,7 +609,8 @@ class TaggedTestListParser(object):
 class TestExpectations(object):
 
     def __init__(self, tags=None, ignored_tags=None, encode_func=None,
-                 decode_func=None):
+                 decode_func=None,
+                 disable_tag_found_after_expectations_check=False):
         self.tag_sets = set()
         self.ignored_tags = set(ignored_tags or [])
         self.set_tags(tags or [])
@@ -611,11 +621,12 @@ class TestExpectations(object):
         # a regular dict for reasons given below.
         self.individual_exps = OrderedDict()
         self.glob_exps = OrderedDict()
-        self._cached_reduced_globs = dict()
         self._full_wildcard_support = False
         self._conflict_resolution = ConflictResolutionTypes.UNION
         self._encode_func = encode_func
         self._decode_func = decode_func
+        self._disable_tag_found_after_expectations_check = (
+            disable_tag_found_after_expectations_check)
 
     def set_tags(self, tags, raise_ex_for_bad_tags=False):
         self.validate_condition_tags(tags, raise_ex_for_bad_tags)
@@ -668,10 +679,13 @@ class TestExpectations(object):
         self._conflict_resolution = conflict_resolution
         tags_conflict = tags_conflict or _default_tags_conflict
         try:
-            parser = TaggedTestListParser(raw_data,
-                                          conflict_resolution,
-                                          encode_func=self._encode_func,
-                                          decode_func=self._decode_func)
+            parser = TaggedTestListParser(
+                raw_data,
+                conflict_resolution,
+                encode_func=self._encode_func,
+                decode_func=self._decode_func,
+                disable_tag_found_after_expectations_check=
+                    self._disable_tag_found_after_expectations_check)
         except ParseError as e:
             return 1, str(e)
         # If we have parsed another tagged list before, ensure that the tag sets
@@ -703,7 +717,6 @@ class TestExpectations(object):
         glob_exps.sort(key=lambda exp: len(exp.test), reverse=True)
         for exp in glob_exps:
             self.glob_exps.setdefault(exp.test, []).append(exp)
-            self._maybe_cache_reduced_glob(exp.test)
 
         errors = ''
         if not parser.conflicts_allowed:
@@ -721,7 +734,6 @@ class TestExpectations(object):
             self.individual_exps.setdefault(pattern, []).extend(exps)
         for pattern, exps in other.glob_exps.items():
             self.glob_exps.setdefault(pattern, []).extend(exps)
-            self._maybe_cache_reduced_glob(pattern)
         # resort the glob patterns by length in self.glob_exps ordered
         # dictionary
         glob_exps = self.glob_exps
@@ -729,21 +741,6 @@ class TestExpectations(object):
         for pattern, exps in sorted(
               glob_exps.items(), key=lambda item: len(item[0]), reverse=True):
             self.glob_exps[pattern] = exps
-
-    def _maybe_cache_reduced_glob(self, pattern):
-        """Helper function to store a ReducedGlob for |pattern|.
-
-        Args:
-            pattern: A string containing the pattern to store in the
-                ReducedGlob.
-        """
-        if not self._full_wildcard_support:
-            return
-        # Avoid using setdefault so we aren't running ReducedGlob.__init__()
-        # every time.
-        if pattern in self._cached_reduced_globs:
-            return
-        self._cached_reduced_globs[pattern] = reduced_glob.ReducedGlob(pattern)
 
     def expectations_for(self, test):
         # Returns an Expectation.
@@ -784,7 +781,7 @@ class TestExpectations(object):
         # is ordered by length, this is a simple linear search
         for glob, exps in self.glob_exps.items():
             if self._full_wildcard_support:
-                if self._cached_reduced_globs[glob].matchcase(test):
+                if reduced_glob.get_cached_instance(glob).matchcase(test):
                     for exp in exps:
                         self._maybe_merge_expectation_data(exp, merged_expectation_data)
             else:
@@ -944,7 +941,7 @@ class TestExpectations(object):
         broken_glob_exps = []
         for pattern, exps in self.glob_exps.items():
             for test in test_names:
-                if self._cached_reduced_globs[pattern].matchcase(test):
+                if reduced_glob.get_cached_instance(pattern).matchcase(test):
                     break
             else:
                 broken_glob_exps.extend(exps)

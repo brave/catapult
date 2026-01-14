@@ -84,6 +84,7 @@ class TabTest(tab_test_case.TabTestCase):
 
   @decorators.Enabled('has tabs')
   @decorators.Disabled('chromeos') # https://crbug.com/947675
+  @decorators.Disabled('win')  # crbug.com/410761163
   def testActivateTab(self):
     py_utils.WaitFor(lambda: _IsDocumentVisible(self._tab), timeout=5)
     new_tab = self._browser.tabs.New()
@@ -94,6 +95,9 @@ class TabTest(tab_test_case.TabTestCase):
     py_utils.WaitFor(lambda: _IsDocumentVisible(self._tab), timeout=5)
     self.assertFalse(_IsDocumentVisible(new_tab))
 
+  # This test is flaky on all platforms:
+  # https://crbug.com/446286399, https://crbug.com/444018704
+  @decorators.Disabled('all')
   def testTabUrl(self):
     self.assertEqual(self._tab.url, 'about:blank')
     url = self.UrlOfUnittestFile('blank.html')
