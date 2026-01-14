@@ -15,6 +15,7 @@ BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
 
 from dashboard.models import subscription
 
+# Metrics we track with 0.5% threshold.
 _METRICS_PATTERN_HALF_PERCENT = re.compile('|'.join([
   # apk total size:
   'apk_size/(TransferSize|InstallSize)',
@@ -24,12 +25,13 @@ _METRICS_PATTERN_HALF_PERCENT = re.compile('|'.join([
   'all_processes:process_count',
 ]))
 
-# Metrics that are stable and tolerate to small min_relative_change.
+# Metrics we track with 3% threshold.
 _METRICS_PATTERN_3_PERCENT = re.compile('|'.join([
     # Memory:
     'reported_by_chrome:allocated_objects_size/',
 ]))
 
+# Metrics we track with 5% threshold.
 _METRICS_PATTERN_5_PERCENT = re.compile('|'.join([
     # Memory:
     'reported_by_os:private_footprint_size/',
