@@ -57,6 +57,13 @@ SYSTEM_CONDITION_TAGS = frozenset([
     'mac',
     'mac-10.12',
     'mac-10.13',
+    # chips for different Mac models
+    'intel',
+    'm1',
+    'm2',
+    'm3',
+    'm4',
+    'm5',
     'win',
     'win10',
     'win7',

@@ -92,6 +92,11 @@ class Attempt:
       else:
         return
 
+  def Fail(self):
+    assert not self.completed
+    if self._last_execution and not self._last_execution.completed:
+      self._last_execution.Cancel()
+
   def _Poll(self):
     """Update the Attempt status."""
     if self._last_execution and not self._last_execution.completed:

@@ -2126,7 +2126,7 @@ class DeviceUtils(object):
     self.RunShellCommand(cmd, check_return=True)
 
   @decorators.WithTimeoutAndRetriesFromInstance()
-  def GetCurrentUser(self, cache=False, timeout=None, retries=None):
+  def GetCurrentUser(self, cache=True, timeout=None, retries=None):
     """Return an integer representing the id of the current foreground user.
 
     Args:

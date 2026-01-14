@@ -43,6 +43,21 @@ class MacPlatformBackend(posix_platform_backend.PosixPlatformBackend):
     return int(self.RunCommand(['sysctl', '-n', 'hw.memsize']))
 
   @decorators.Cache
+  def GetChipModel(self):
+    # print the CPU info. It could be like:
+    #  For arm: Apple M4 Pro
+    #  For intel: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+    cpu_brand_string = self.RunCommand(
+        ['sysctl', '-n', 'machdep.cpu.brand_string']).decode("utf-8")
+    cpu_info_pieces = cpu_brand_string.split()
+    if not cpu_brand_string.startswith('Apple'):
+      brand_piece = cpu_info_pieces[0]
+      return brand_piece.removesuffix('(R)').lower()
+    if len(cpu_info_pieces) > 1:
+      return cpu_info_pieces[1].lower()
+    return ''
+
+  @decorators.Cache
   def GetArchName(self):
     return platform.machine()
 
@@ -73,6 +88,9 @@ class MacPlatformBackend(posix_platform_backend.PosixPlatformBackend):
   def GetTypExpectationsTags(self):
     tags = super().GetTypExpectationsTags()
     tags.append('mac-' + os.uname()[4])
+    chip = self.GetChipModel()
+    if chip:
+      tags.append(chip)
     return tags
 
   @decorators.Cache

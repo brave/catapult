@@ -233,6 +233,16 @@ class ApkHelperTest(mock_calls.TestCase):
       self.assertEqual(helper.GetActivityName(),
                        'org.chromium.abc.MainActivity')
 
+  def testGetActivityNamesWithCategory(self):
+    with _MockAaptDump(_MANIFEST_DUMP):
+      helper = apk_helper.ApkHelper('')
+      self.assertEqual(['org.chromium.abc.MainActivity'],
+                       helper.GetActivityNamesWithCategory(
+                           'android.intent.category.LAUNCHER'))
+      self.assertEqual([],
+                       helper.GetActivityNamesWithCategory(
+                           'android.intent.category.BROWSABLE'))
+
   def testGetViewActivityName(self):
     with _MockAaptDump(_MANIFEST_DUMP):
       helper = apk_helper.ApkHelper('')

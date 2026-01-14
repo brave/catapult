@@ -413,15 +413,6 @@ class PossibleAndroidBrowser(possible_browser.PossibleBrowser):
       # doesn't interfere.
       device.SetWebViewFallbackLogic(False)
       should_override_webview_provider = True
-    elif sdk_version >= version_codes.Q:
-      # For Android Q and above, WebView is the only provider that is allowed,
-      # so no other Chrome packages can be set as the WebView implementation.
-      should_override_webview_provider = False
-    elif 'monochrome' in apk_name.lower():
-      # From Android Nougat to Android P, some Chrome packages are also allowed
-      # to be WebView providers. Monochrome is the only Chrome build variant
-      # that can also act as a WebView provider.
-      should_override_webview_provider = True
     else:
       should_override_webview_provider = False
 

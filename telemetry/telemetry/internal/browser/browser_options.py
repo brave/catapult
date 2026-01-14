@@ -297,6 +297,10 @@ class BrowserFinderOptions(argparse.Namespace):
                        'running 20+ benchmarks much faster (especially on '
                        'android where UpdateExecutableIfNeeded can take '
                        'minutes).')
+    group.add_argument('--do-not-store-tombstones',
+                       action='store_false',
+                       dest='store_tombstones',
+                       help='Do not store tombstones from an Android device.')
 
     # Cast browser options
     group = parser.add_argument_group('Cast browser options')
@@ -854,7 +858,7 @@ class BrowserOptions():
     """
     consolidated_args = []
     found_values = []
-    for arg in self.extra_browser_args:
+    for arg in self._extra_browser_args:
       if '=' in arg and arg.split('=', 1)[0] == flag:
         # Syntax is `--flag=A,B`.
         # Support for the `--flag A,B` syntax isn't present since the extra

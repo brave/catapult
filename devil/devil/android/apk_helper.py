@@ -252,6 +252,19 @@ class BaseApkHelper(object):
         return self._ResolveName(activity.name)
     return None
 
+  def GetActivityNamesWithCategory(self, category_name):
+    """
+    Returns a list of exported activity names with the specified Intent
+    category.
+    """
+    manifest_info = self._GetManifest()
+    activity_names = []
+
+    for activity in _IterateExportedActivities(manifest_info):
+      if category_name in activity.categories:
+        activity_names.append(self._ResolveName(activity.name))
+    return activity_names
+
   def GetViewActivityName(self):
     """Returns name of the first action=View Activity that can handle http."""
     manifest_info = self._GetManifest()
@@ -342,6 +355,15 @@ class BaseApkHelper(object):
       return application.get('android:use32bitAbi')
     except KeyError:
       return None
+
+  def GetIsDebuggable(self):
+    """Returns the value of android:debuggable or False if not available."""
+    manifest_info = self._GetManifest()
+    try:
+      application = manifest_info['manifest'][0]['application'][0]
+      return _ParseNumericKey(application, 'android:debuggable') != 0
+    except KeyError:
+      return False
 
   def GetVersionCode(self):
     """Returns the versionCode as an integer, or None if not available."""

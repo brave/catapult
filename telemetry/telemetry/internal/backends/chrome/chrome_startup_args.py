@@ -24,7 +24,7 @@ def GetFromBrowserOptions(browser_options):
   # Disable the HangWatcher so that it does not generate dumps, leading to test
   # failures; see https://crbug.com/425223287.
   browser_options.AppendExtraBrowserArgs(
-      ['--disable-features=EnableHangWatcher'])
+      ['--disable-features=EnableHangWatcher,EnableHangWatcherOnGpuProcess'])
   browser_options.ConsolidateValuesForArg('--disable-features')
 
   # Sort to ensure determinism.

@@ -570,6 +570,7 @@ class FakeRevisionInfoClient:
       url = info.get('url', '')
       info['url'] = url.replace('{{R1}}', revision_start[k]).replace(
           '{{R2}}', revision_end[k])
+      info['range'] = "%s..%s" % (revision_start, revision_end)
       infos.append(info)
     return infos
 

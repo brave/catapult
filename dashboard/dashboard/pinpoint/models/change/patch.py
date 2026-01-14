@@ -37,9 +37,26 @@ class GerritPatch(
     return '%s/%s/%s' % (self.server, str(
         self.change).strip(), str(self.revision).strip())
 
-  def BuildParameters(self):
+  def GetGerritChange(self):
     patch_info = gerrit_service.GetChange(
         self.server, self.change, fields=('ALL_REVISIONS',))
+    # workaround for b/460800062
+    # if the patch CL is merged, we should use the patchset before
+    # auto rebase.
+    if patch_info['status'] == 'MERGED':
+      revision_info = patch_info['revisions'][self.revision]
+      patch_ref_pieces = revision_info['fetch']['http']['ref'].split('/')
+      patch_set = revision_info['_number']
+      if len(patch_ref_pieces) > 1 and int(
+          patch_ref_pieces[-1]) == patch_set and patch_set > 1:
+        new_patch_set = patch_set - 1
+        patch_ref_pieces[-1] = str(new_patch_set)
+        revision_info['_number'] = new_patch_set
+        revision_info['fetch']['http']['ref'] = '/'.join(patch_ref_pieces)
+    return patch_info
+
+  def BuildParameters(self):
+    patch_info = self.GetGerritChange()
     revision_info = patch_info['revisions'][self.revision]
     return {
         'patch_gerrit_url': self.server,
@@ -57,8 +74,7 @@ class GerritPatch(
     return h.split('/')[0]
 
   def BuildsetTags(self):
-    patch_info = gerrit_service.GetChange(
-        self.server, self.change, fields=('ALL_REVISIONS',))
+    patch_info = self.GetGerritChange()
     revision_info = patch_info['revisions'][self.revision]
     return 'buildset:patch/gerrit/%s/%s/%s' % (
         self.hostname, patch_info['_number'], revision_info['_number'])

@@ -668,13 +668,8 @@ SUFFIXED_EXPERIMENTAL_TELEMETRY_BENCHMARKS = {
 SUFFIXES = {
     '',
     '_android_chrome',
-    '_android_monochrome',
-    '_android_monochrome_bundle',
     '_android_webview',
     '_android_clank_chrome',
-    '_android_clank_monochrome',
-    '_android_clank_monochrome_64_32_bundle',
-    '_android_clank_monochrome_bundle',
     '_android_clank_trichrome_webview',
     '_android_clank_trichrome_webview_bundle',
     '_android_clank_webview',

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -24,7 +24,12 @@ from unittest import mock
 
 import six
 
-from devil import devil_env
+try:
+  from devil import devil_env
+except ModuleNotFoundError:
+  sys.path.insert(1, os.path.join(os.path.dirname(__file__), '..', '..'))
+  from devil import devil_env
+
 from devil.android import device_errors
 from devil.android import device_signal
 from devil.android import device_utils
