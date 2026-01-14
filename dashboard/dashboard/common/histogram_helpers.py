@@ -10,46 +10,97 @@ import re
 
 from tracing.value.diagnostics import reserved_infos
 
-# List of non-TBMv2 chromium.perf Telemetry benchmarks
-_LEGACY_BENCHMARKS = [
-    'blink_perf.bindings', 'blink_perf.canvas', 'blink_perf.css',
-    'blink_perf.dom', 'blink_perf.events', 'blink_perf.image_decoder',
-    'blink_perf.layout', 'blink_perf.owp_storage', 'blink_perf.paint',
-    'blink_perf.parser', 'blink_perf.shadow_dom', 'blink_perf.svg',
-    'cronet_perf_tests', 'dromaeo', 'dummy_benchmark.noisy_benchmark_1',
-    'dummy_benchmark.stable_benchmark_1', 'jetstream2', 'jetstream2-minorms',
-    'jetstream2.crossbench', 'kraken', 'motionmark1.3.crossbench', 'octane',
-    'rasterize_and_record_micro.partial_invalidation',
-    'rasterize_and_record_micro.top_25', 'scheduler.tough_scheduling_cases',
-    'smoothness.desktop_tough_pinch_zoom_cases',
-    'smoothness.gpu_rasterization.polymer',
-    'smoothness.gpu_rasterization.top_25_smooth',
-    'smoothness.gpu_rasterization.tough_filters_cases',
-    'smoothness.gpu_rasterization.tough_path_rendering_cases',
-    'smoothness.gpu_rasterization.tough_pinch_zoom_cases',
-    'smoothness.gpu_rasterization.tough_scrolling_cases',
-    'smoothness.gpu_rasterization_and_decoding.image_decoding_cases',
-    'smoothness.image_decoding_cases', 'smoothness.key_desktop_move_cases',
-    'smoothness.key_mobile_sites_smooth', 'smoothness.key_silk_cases',
-    'smoothness.maps', 'smoothness.pathological_mobile_sites',
-    'smoothness.simple_mobile_sites',
-    'smoothness.sync_scroll.key_mobile_sites_smooth',
-    'smoothness.top_25_smooth', 'smoothness.tough_ad_cases',
-    'smoothness.tough_animation_cases', 'smoothness.tough_canvas_cases',
-    'smoothness.tough_filters_cases', 'smoothness.tough_image_decode_cases',
-    'smoothness.tough_path_rendering_cases',
-    'smoothness.tough_pinch_zoom_cases', 'smoothness.tough_scrolling_cases',
-    'smoothness.tough_texture_upload_cases', 'smoothness.tough_webgl_ad_cases',
-    'smoothness.tough_webgl_cases', 'speedometer', 'speedometer-future',
-    'speedometer2', 'speedometer2-future', 'speedometer2-minorms',
-    'speedometer2-predictable', 'speedometer3', 'speedometer3-future',
-    'speedometer3-minorms', 'speedometer3-predictable',
-    'speedometer3.crossbench', 'thread_times.key_hit_test_cases',
-    'thread_times.key_idle_power_cases', 'thread_times.key_mobile_sites_smooth',
-    'thread_times.key_noop_cases', 'thread_times.key_silk_cases',
-    'thread_times.simple_mobile_sites', 'thread_times.tough_compositor_cases',
-    'thread_times.tough_scrolling_cases', 'v8.detached_context_age_in_gc'
+_BENCHMARKS_WITH_SYNTHETIC_STATISTICS = [
+    'ad_frames.fencedframe',
+    'angle_perftests',
+    'angle_trace_tests',
+    'base_perftests',
+    'blink_perf.accessibility',
+    'blink_perf.display_locking',
+    'blink_perf.sanitizer-api',
+    'blink_perf.webaudio',
+    'blink_perf.webcodecs',
+    'blink_perf.webgl',
+    'blink_perf.webgl_fast_call',
+    'blink_perf.webgpu',
+    'blink_perf.webgpu_fast_call',
+    'chromecast_resource_sizes',
+    'chromeperf.stats',
+    'clamp',
+    'components_perftests',
+    'crosvm.binary_output',
+    'dawn_perf_tests',
+    'desktop_ui',
+    'devtools.infra',
+    'diffractor',
+    'diffractor_test',
+    'effects_performance_test',
+    'example_cc_performance_test',
+    'example_java_based_mobile_perf_test_android',
+    'jetstream',
+    'jetstream2-no-field-trials',
+    'jetstream2-nominorms',
+    'lacros_resource_sizes',
+    'load_library_perf_tests',
+    'loadline_phone_debug.crossbench',
+    'media.desktop',
+    'media.mobile',
+    'media_backends_test',
+    'memory.desktop',
+    'octane-minorms',
+    'octane-nominorms',
+    'performance_browser_tests',
+    'pinpoint.success',
+    'platform.ReportDiskUsage',
+    'power.desktop',
+    'rendering.desktop',
+    'rendering.desktop.notracing',
+    'rendering.mobile',
+    'rendering.mobile.notracing',
+    'resource_sizes (CronetSample.apk)',
+    'resource_sizes (Monochrome.minimal.apks)',
+    'resource_sizes (SystemWebViewGoogle.minimal.apks)',
+    'resource_sizes (TrichromeGoogle)',
+    'sizes',
+    'speedometer2-nominorms',
+    'speedometer3-no-field-trials',
+    'speedometer3-nominorms',
+    'startup.mobile',
+    'system_health.common_desktop',
+    'system_health.common_mobile',
+    'system_health.memory_desktop',
+    'system_health.memory_mobile',
+    'system_health.scroll_jank_mobile',
+    'system_health.webview_startup',
+    'tint_benchmark',
+    'tracing_perftests',
+    'v8',
+    'v8.browsing_desktop',
+    'v8.browsing_desktop-future',
+    'v8.browsing_mobile',
+    'v8.browsing_mobile-future',
+    'v8.infra',
+    'v8.runtime_stats.top_25',
+    'v8.testing',
+    'video_codec_perf_tests',
+    'videocodec_test_rcc_videotoolbox',
+    'views_perftests',
+    'wasmpspdfkit',
+    'webrtc',
+    'webrtc_pc_regression_tests',
+    'webrtc_perf_tests',
+    'webrtc_perf_tests_mobile_internal',
+    'webrtc_transparency_evaluation_test',
+    'widevine-cdm.perf',
+    'widevine-whitebox.perf',
+    'xr.webxr.static',
 ]
+
+
+def ShouldGenerateStatistics(benchmark_name):
+  return benchmark_name in _BENCHMARKS_WITH_SYNTHETIC_STATISTICS or benchmark_name.startswith(
+      'fuchsia.')
+
 _STATS_BLACKLIST = ['std', 'count', 'max', 'min', 'sum']
 
 SUITE_LEVEL_SPARSE_DIAGNOSTIC_NAMES = {
@@ -161,10 +212,6 @@ def GetGroupingLabelFromHistogram(hist):
   tags_to_use = [t.split(':') for t in tags if ':' in t]
 
   return '_'.join(v for _, v in sorted(tags_to_use))
-
-
-def IsLegacyBenchmark(benchmark_name):
-  return benchmark_name in _LEGACY_BENCHMARKS
 
 
 def ShouldFilterStatistic(test_name, benchmark_name, stat_name):

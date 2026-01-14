@@ -2736,7 +2736,7 @@
     },
     "10766": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "void cc::LayerTreeHostImpl::RemoveRenderPasses<cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads>(cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads, cc::LayerTreeHostImpl::FrameData*)",
+      "name": "void cc::LayerTreeHostImpl::RemoveRenderPasses<cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads>(cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads, cc::FrameData*)",
       "parent": 3758
     },
     "10769": {
@@ -9853,7 +9853,7 @@
     },
     "312": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::SingleThreadProxy::CommitAndComposite(base::TimeTicks, gfx::Rect const&, bool, cc::LayerTreeHostImpl::FrameData*)",
+      "name": "cc::SingleThreadProxy::CommitAndComposite(base::TimeTicks, gfx::Rect const&, bool, cc::FrameData*)",
       "parent": 311
     },
     "311": {
@@ -19704,7 +19704,7 @@
     },
     "11916": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::FrameData::FrameData()",
+      "name": "cc::FrameData::FrameData()",
       "parent": 1546
     },
     "11919": {
@@ -20506,7 +20506,7 @@
     },
     "1055": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::PrepareToDraw(cc::LayerTreeHostImpl::FrameData*, gfx::Rect const&)",
+      "name": "cc::LayerTreeHostImpl::PrepareToDraw(cc::FrameData*, gfx::Rect const&)",
       "parent": 1043
     },
     "1056": {
@@ -20815,7 +20815,7 @@
     },
     "1952": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::SwapBuffers(cc::LayerTreeHostImpl::FrameData const&)",
+      "name": "cc::LayerTreeHostImpl::SwapBuffers(cc::FrameData const&)",
       "parent": 1043
     },
     "10046": {
@@ -24867,7 +24867,7 @@
     },
     "8649": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "void cc::LayerTreeHostImpl::RemoveRenderPasses<cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads>(cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads, cc::LayerTreeHostImpl::FrameData*)",
+      "name": "void cc::LayerTreeHostImpl::RemoveRenderPasses<cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads>(cc::LayerTreeHostImpl::CullRenderPassesWithNoQuads, cc::FrameData*)",
       "parent": 1924
     },
     "8646": {
@@ -34078,7 +34078,7 @@
     },
     "1143": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::DrawLayers(cc::LayerTreeHostImpl::FrameData*, base::TimeTicks)",
+      "name": "cc::LayerTreeHostImpl::DrawLayers(cc::FrameData*, base::TimeTicks)",
       "parent": 1043
     },
     "1140": {
@@ -34444,17 +34444,17 @@
     },
     "380": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::SingleThreadProxy::DoComposite(scoped_refptr<cc::ContextProvider>, base::TimeTicks, gfx::Rect const&, bool, cc::LayerTreeHostImpl::FrameData*)",
+      "name": "cc::SingleThreadProxy::DoComposite(scoped_refptr<cc::ContextProvider>, base::TimeTicks, gfx::Rect const&, bool, cc::FrameData*)",
       "parent": 312
     },
     "381": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::PrepareToDraw(cc::LayerTreeHostImpl::FrameData*, gfx::Rect const&)",
+      "name": "cc::LayerTreeHostImpl::PrepareToDraw(cc::FrameData*, gfx::Rect const&)",
       "parent": 380
     },
     "382": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::CalculateRenderPasses(cc::LayerTreeHostImpl::FrameData*)",
+      "name": "cc::LayerTreeHostImpl::CalculateRenderPasses(cc::FrameData*)",
       "parent": 381
     },
     "383": {
@@ -34474,7 +34474,7 @@
     },
     "386": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::DrawLayers(cc::LayerTreeHostImpl::FrameData*, base::TimeTicks)",
+      "name": "cc::LayerTreeHostImpl::DrawLayers(cc::FrameData*, base::TimeTicks)",
       "parent": 380
     },
     "387": {
@@ -34634,7 +34634,7 @@
     },
     "3758": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::CalculateRenderPasses(cc::LayerTreeHostImpl::FrameData*)",
+      "name": "cc::LayerTreeHostImpl::CalculateRenderPasses(cc::FrameData*)",
       "parent": 1547
     },
     "5376": {
@@ -35480,7 +35480,7 @@
     },
     "1554": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::DrawLayers(cc::LayerTreeHostImpl::FrameData*, base::TimeTicks)",
+      "name": "cc::LayerTreeHostImpl::DrawLayers(cc::FrameData*, base::TimeTicks)",
       "parent": 1546
     },
     "1557": {
@@ -42541,7 +42541,7 @@
     },
     "6916": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::FrameData::FrameData()",
+      "name": "cc::FrameData::FrameData()",
       "parent": 1043
     },
     "6445": {
@@ -46107,7 +46107,7 @@
     },
     "5237": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::FrameData::AppendRenderPass(scoped_ptr<cc::RenderPass, base::DefaultDeleter<cc::RenderPass> >)",
+      "name": "cc::FrameData::AppendRenderPass(scoped_ptr<cc::RenderPass, base::DefaultDeleter<cc::RenderPass> >)",
       "parent": 1230
     },
     "3700": {
@@ -52547,7 +52547,7 @@
     },
     "8259": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::FrameData::AppendRenderPass(scoped_ptr<cc::RenderPass, base::DefaultDeleter<cc::RenderPass> >)",
+      "name": "cc::FrameData::AppendRenderPass(scoped_ptr<cc::RenderPass, base::DefaultDeleter<cc::RenderPass> >)",
       "parent": 8258
     },
     "1425": {
@@ -53066,7 +53066,7 @@
     },
     "1547": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::PrepareToDraw(cc::LayerTreeHostImpl::FrameData*, gfx::Rect const&)",
+      "name": "cc::LayerTreeHostImpl::PrepareToDraw(cc::FrameData*, gfx::Rect const&)",
       "parent": 1546
     },
     "6517": {
@@ -55394,7 +55394,7 @@
     },
     "1924": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::CalculateRenderPasses(cc::LayerTreeHostImpl::FrameData*)",
+      "name": "cc::LayerTreeHostImpl::CalculateRenderPasses(cc::FrameData*)",
       "parent": 1055
     },
     "3273": {
@@ -64838,7 +64838,7 @@
     },
     "11178": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::FrameData::FrameData()",
+      "name": "cc::FrameData::FrameData()",
       "parent": 311
     },
     "2909": {
@@ -64967,7 +64967,7 @@
     },
     "3767": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::SwapBuffers(cc::LayerTreeHostImpl::FrameData const&)",
+      "name": "cc::LayerTreeHostImpl::SwapBuffers(cc::FrameData const&)",
       "parent": 1546
     },
     "3768": {
@@ -65740,7 +65740,7 @@
     },
     "1742": {
       "category": "/data/app-lib/com.google.android.apps.chrome-1/libchrome.1931.0.so",
-      "name": "cc::LayerTreeHostImpl::SwapBuffers(cc::LayerTreeHostImpl::FrameData const&)",
+      "name": "cc::LayerTreeHostImpl::SwapBuffers(cc::FrameData const&)",
       "parent": 311
     },
     "5499": {

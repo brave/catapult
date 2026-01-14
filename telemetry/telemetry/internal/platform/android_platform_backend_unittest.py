@@ -51,6 +51,32 @@ class AndroidPlatformBackendTest(unittest.TestCase):
     return android_platform_backend.AndroidPlatformBackend(
         android_device.AndroidDevice('12345'), True)
 
+  def testGetOSVersionNameOlderOS(self):
+
+    def SideEffect(prop):
+      if prop == 'ro.build.id':
+        return 'U1234'
+      if prop == 'ro.build.version.release':
+        return '13.a.b.c'
+      raise RuntimeError(f'Unexpected call with property {prop}')
+
+    backend = self.CreatePlatformBackendForTest()
+    with mock.patch.object(backend._device, 'GetProp', side_effect=SideEffect):
+      self.assertEqual(backend.GetOSVersionName(), 'U')
+
+  def testGetOSVersionNameNewerOS(self):
+
+    def SideEffect(prop):
+      if prop == 'ro.build.id':
+        return 'U1234'
+      if prop == 'ro.build.version.release':
+        return '14.a.b.c'
+      raise RuntimeError(f'Unexpected call with property {prop}')
+
+    backend = self.CreatePlatformBackendForTest()
+    with mock.patch.object(backend._device, 'GetProp', side_effect=SideEffect):
+      self.assertEqual(backend.GetOSVersionName(), '14')
+
   @decorators.Disabled('chromeos', 'mac', 'win')
   def testGetFriendlyOsVersionNameInPlatformTags(self):
     backend = self.CreatePlatformBackendForTest()
@@ -181,6 +207,23 @@ class AndroidPlatformBackendTest(unittest.TestCase):
                                return_value='10'):
           self.assertIn('android-nexus-5x', backend.GetTypExpectationsTags())
           self.assertIn('mobile', backend.GetTypExpectationsTags())
+
+  @decorators.Disabled('chromeos', 'mac', 'win')
+  def testTypExpectationsTagsIncludesForAndroidDesktop(self):
+    backend = self.CreatePlatformBackendForTest()
+    with mock.patch('devil.android.device_utils.DeviceUtils.GetProp',
+                    return_value='foo'):
+      with mock.patch.object(backend,
+                             'GetDeviceTypeName',
+                             return_value='AOSP on BullHead'):
+        with mock.patch.object(backend,
+                               'GetOSReleaseVersion',
+                               return_value='10'):
+          with mock.patch.object(backend, 'IsPcHardwareType',
+                                 return_value=True):
+            tags = backend.GetTypExpectationsTags()
+            self.assertIn('desktop', tags)
+            self.assertNotIn('mobile', tags)
 
   @decorators.Disabled('chromeos', 'mac', 'win')
   def testIsSvelte(self):

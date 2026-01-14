@@ -22,9 +22,11 @@ import datetime
 import functools
 import random
 import logging
+import time
 
 from google.appengine.api import app_identity
 from google.appengine.ext import ndb
+from google.appengine.runtime import apiproxy_errors
 
 from dashboard.common import bot_configurations
 from dashboard.common import cloud_metric
@@ -78,7 +80,26 @@ class ConfigurationQueue(ndb.Model):
 
   @classmethod
   def GetOrCreateQueue(cls, configuration):
-    parent = Queues.get_by_id('root')
+    parent = None
+    max_retries = 5
+    delay = 1
+
+    for i in range(max_retries):
+      try:
+        parent = Queues.get_by_id('root')
+        break
+      except apiproxy_errors.ApplicationError as e:
+        if i < max_retries - 1:
+          logging.warning(
+              'Queues.get_by_id(\'root\') failed due to error: %s. Retrying...',
+              e)
+          time.sleep(delay)
+        else:
+          logging.error(
+              'Queues.get_by_id(\'root\') failed after %d retries. Giving up. Error: %s',
+              max_retries, e)
+          raise
+
     if not parent:
       parent = Queues(id='root')
       parent.put()
@@ -124,7 +145,7 @@ class QueueNotFound(Error):
   pass
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def Schedule(job, cost=1.0):
   """Schedules a job for later execution.
 
@@ -170,7 +191,7 @@ def Schedule(job, cost=1.0):
       job.benchmark_arguments.benchmark, job.benchmark_arguments.story)
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def PickJobs(configuration, budget=1.0):
   """Picks a job for execution for a given configuration.
 
@@ -237,7 +258,7 @@ def PickJobs(configuration, budget=1.0):
   return results
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def QueueStats(configuration):
   """Computes and returns statistics for a queue.
 
@@ -275,7 +296,7 @@ def QueueStats(configuration):
   })
   return result
 
-@ndb.transactional
+
 def IsStopped(job):
   """Checks if a job has stopped or not. Jobs should be stopped if
   their status in the job queue is not Running or Queued."""
@@ -291,7 +312,8 @@ def IsStopped(job):
         return False
   return True
 
-@ndb.transactional
+
+@ndb.transactional(retries=10)
 def Cancel(job):
   """Marks a job for cancellation in the appropriate queue.
 
@@ -324,7 +346,7 @@ def Cancel(job):
   return found
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def Complete(job):
   """Marks a job completed in the appropriate queue.
 
@@ -353,7 +375,7 @@ def Complete(job):
   queue.put()
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def Remove(configuration, job_id):
   """Forcibly removes a job from the queue, by ID.
 
@@ -376,7 +398,7 @@ def Remove(configuration, job_id):
   queue.put()
 
 
-@ndb.transactional
+@ndb.transactional(retries=10)
 def AllConfigurations():
   return [q.configuration for q in ConfigurationQueue.AllQueues().fetch()]
 
