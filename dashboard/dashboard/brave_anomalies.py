@@ -29,23 +29,19 @@ import dashboard.brave_sheriff_config_client as brave_sheriff
 _LAST_TOTAL_CHECK_KEY = 'brave_anomaly_new_check_timestamp'
 _BRAVE_EMAILS_TO_NOTIFY_KEY = 'brave_emails_to_notify'
 
-def _GetUntriagedAnomaliesCount(min_timestamp, max_timestamp):
+def _GetUntriagedAnomaliesCount():
   """Fetches recent untriaged anomalies asynchronously from all sheriffs."""
   # Previous code process anomalies by sheriff with LIMIT. It prevents some
   # extreme cases that anomalies produced by a single sheriff prevent other
   # sheriff's anomalies being processed. But it introduced some unnecessary
   # complex to system and considered almost impossible happened.
-  logging.info('Fetching untriaged anomalies fired %s - %s',
-               min_timestamp, max_timestamp)
   keys, _ , _ = anomaly.Anomaly.QueryAsync(
       keys_only=True,
       limit=1000,
       recovered=False,
       subscriptions=[brave_sheriff.BRAVE_TOP_METRICS_SHERRIF],
       is_improvement=False,
-      bug_id='', # untriaged
-      max_timestamp=max_timestamp,
-      min_timestamp=min_timestamp).get_result()
+      bug_id='').get_result()
   logging.info('Got keys %s', keys)
   return len(keys)
 
@@ -71,7 +67,7 @@ def MaybeSendEmail():
   force = request.values.get('force') == 'true'
   now = datetime.datetime.now()
 
-  total = _GetUntriagedAnomaliesCount(None, None)
+  total = _GetUntriagedAnomaliesCount()
   if total > 0:
     _SendEmail(f'{total} perf alert(s) need to be processed')
     stored_object.Set(_LAST_TOTAL_CHECK_KEY, now)

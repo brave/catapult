@@ -9,6 +9,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from typing import Optional
+
 import re
 
 BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
@@ -66,7 +68,6 @@ _METRICS_PATTERN_5_PERCENT = re.compile('|'.join([
 ]))
 
 _IGNORE_PATTERN = re.compile('|'.join([
-  # '^BravePerf/test-agent',
   '/Metric_duration',
   '_avg',
   '_sum',
@@ -112,15 +113,25 @@ class BraveSheriffConfigClient(object):
     if _IGNORE_PATTERN.search(path) is not None:
       return [], None
 
-    if _ONLINE_METRICS_PATTERN.search(path) is None:  # online use < 5% accuracy
-      if _METRICS_PATTERN_HALF_PERCENT.search(path) is not None:
-        return [_GetTopMetricsSubscription(0.005)], None
-      if _METRICS_PATTERN_3_PERCENT.search(path) is not None:
-        return [_GetTopMetricsSubscription(0.03)], None
+    accuracy: Optional[float] = None
+
+    if _METRICS_PATTERN_HALF_PERCENT.search(path) is not None:
+      accuracy = 0.005
+
+    if _METRICS_PATTERN_3_PERCENT.search(path) is not None:
+      accuracy = 0.03
 
     if _METRICS_PATTERN_5_PERCENT.search(path) is not None:
-      return [_GetTopMetricsSubscription(0.05)], None
+      accuracy = 0.05
+
+    if _ONLINE_METRICS_PATTERN.search(path) is not None and accuracy is not None:
+      # limit target accuracy to 5% for online metrics
+      accuracy = 0.05
+
+    if accuracy is not None:
+      return [_GetTopMetricsSubscription(accuracy)], None
     return [_GetOtherMetricsSubscription()], None
+
 
   def List(self, check=False):
     return [_GetTopMetricsSubscription(), _GetOtherMetricsSubscription()], None
