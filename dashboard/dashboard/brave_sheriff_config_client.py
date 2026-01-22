@@ -9,26 +9,32 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from typing import Optional
+
 import re
 
 BRAVE_TOP_METRICS_SHERRIF = 'Top Metrics'
 
 from dashboard.models import subscription
 
-# Metrics that are stable and tolerate to small min_relative_change.
-_TOP_STABLE_METRICS_PATTERN = re.compile('|'.join([
-    # Memory:
-    'reported_by_chrome:allocated_objects_size/',
+# Metrics we track with 0.5% threshold.
+_METRICS_PATTERN_HALF_PERCENT = re.compile('|'.join([
+  # apk total size:
+  'apk_size/(TransferSize|InstallSize)',
 
-    # apk_size:
-    'apk_size/(TransferSize|InstallSize|InstallBreakdown)',
-
-    # Process number
-    'ChildProcess.Launched.UtilityProcessHash#count',
-    'all_processes:process_count',
+  # Process number
+  'ChildProcess.Launched.UtilityProcessHash#count',
+  'all_processes:process_count',
 ]))
 
-_TOP_METRICS_PATTERN = re.compile('|'.join([
+# Metrics we track with 3% threshold.
+_METRICS_PATTERN_3_PERCENT = re.compile('|'.join([
+    # Memory:
+    'reported_by_chrome:allocated_objects_size/',
+]))
+
+# Metrics we track with 5% threshold.
+_METRICS_PATTERN_5_PERCENT = re.compile('|'.join([
     # Memory:
     'reported_by_os:private_footprint_size/',
 
@@ -56,10 +62,12 @@ _TOP_METRICS_PATTERN = re.compile('|'.join([
     'timeToInteractive/',
     'timeToFirstMeaningfulPaint/',
     'cpuTimeToFirstMeaningfulPaint/',
+
+    # apk install breakdown:
+    'apk_size/InstallBreakdown',
 ]))
 
 _IGNORE_PATTERN = re.compile('|'.join([
-  # '^BravePerf/test-agent',
   '/Metric_duration',
   '_avg',
   '_sum',
@@ -70,6 +78,10 @@ _IGNORE_PATTERN = re.compile('|'.join([
   # skip aggregate metrics:
   r'^([^/]+/){2}system_health.\w+(/[^/]+){1,2}$',
   r'^([^/]+/){2}loading.[^/]+(/[^/]+){1,2}$',
+]))
+
+_ONLINE_METRICS_PATTERN = re.compile('|'.join([
+  '^BravePerf/mac-mini-x64-online/',
 ]))
 
 def _GetAnomalyConfigs(min_relative_change: float):
@@ -86,11 +98,8 @@ def _GetSubscription(name: str, min_relative_change: float):
                                    auto_triage_enable=True,
                                    auto_bisect_enable=False)
 
-def _GetTopStableMetricsSubscription():
-  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, 0.03)
-
-def _GetTopMetricsSubscription():
-  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, 0.05)
+def _GetTopMetricsSubscription(min_relative_change: float = 0.05):
+  return _GetSubscription(BRAVE_TOP_METRICS_SHERRIF, min_relative_change)
 
 def _GetOtherMetricsSubscription():
   return _GetSubscription('Brave Sheriff', 0.05)
@@ -104,12 +113,25 @@ class BraveSheriffConfigClient(object):
     if _IGNORE_PATTERN.search(path) is not None:
       return [], None
 
-    if _TOP_STABLE_METRICS_PATTERN.search(path) is not None:
-      return [_GetTopStableMetricsSubscription()], None
-    elif _TOP_METRICS_PATTERN.search(path) is not None:
-      return [_GetTopMetricsSubscription()], None
-    else:
-      return [_GetOtherMetricsSubscription()], None
+    accuracy: Optional[float] = None
+
+    if _METRICS_PATTERN_HALF_PERCENT.search(path) is not None:
+      accuracy = 0.005
+
+    if _METRICS_PATTERN_3_PERCENT.search(path) is not None:
+      accuracy = 0.03
+
+    if _METRICS_PATTERN_5_PERCENT.search(path) is not None:
+      accuracy = 0.05
+
+    if _ONLINE_METRICS_PATTERN.search(path) is not None and accuracy is not None:
+      # limit target accuracy to 5% for online metrics
+      accuracy = 0.05
+
+    if accuracy is not None:
+      return [_GetTopMetricsSubscription(accuracy)], None
+    return [_GetOtherMetricsSubscription()], None
+
 
   def List(self, check=False):
     return [_GetTopMetricsSubscription(), _GetOtherMetricsSubscription()], None
